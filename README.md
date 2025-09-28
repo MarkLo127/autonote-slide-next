@@ -1,5 +1,6 @@
 ## Autonote&Slide
 
+https://autonote-slide.zeabur.app
 
 ### 1. 克隆專案
 
