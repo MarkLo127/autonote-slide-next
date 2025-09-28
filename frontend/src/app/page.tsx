@@ -745,23 +745,9 @@ export default function Home() {
 
         <div className="mt-10 grid grid-cols-1 gap-10 xl:grid-cols-2 xl:items-stretch">
           <section className="relative flex w-full flex-col rounded-[40px] border border-white/60 bg-white/95 p-10 shadow-2xl lg:min-h-[620px] xl:min-h-[700px]">
-            <span className="absolute left-8 top-6 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500">
-              App Preview
-            </span>
-            <div className="mt-14 flex flex-1 flex-col items-center gap-6 text-center">
-              <div className="flex h-24 w-24 items-center justify-center rounded-[32px] bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-500 text-4xl text-white shadow-xl">
-                ⬆️
-              </div>
-              <div>
-                <h1 className="text-3xl font-semibold text-slate-900">
-                  上傳您的檔案
-                </h1>
-                <p className="mt-3 max-w-xl text-base leading-7 text-slate-600">
-                  將檔案拖放到此處，或點擊任何地方瀏覽檔案。上傳後系統將自動為您整理重點、擷取關鍵字並生成心智圖。
-                </p>
-              </div>
+            <div className="mt-10 flex flex-1 flex-col items-center gap-6 text-center">
               <div
-                className={`w-full rounded-3xl border-2 border-dashed bg-gradient-to-br from-slate-50 to-slate-100/70 p-6 transition ${dragging ? "border-indigo-400 bg-indigo-50/70" : "border-slate-200"}`}
+                className={`flex min-h-[420px] w-full flex-col items-center justify-center gap-6 rounded-3xl border-2 border-dashed bg-gradient-to-br from-slate-50 to-slate-100/70 p-10 transition ${dragging ? "border-indigo-400 bg-indigo-50/70" : "border-slate-200"}`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
@@ -783,30 +769,37 @@ export default function Home() {
                     }
                   }}
                 />
-                <div className="flex flex-col items-center gap-4">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="rounded-full bg-slate-900 px-5 py-2 text-sm font-medium text-white shadow-lg transition hover:bg-slate-700"
-                  >
-                    選擇檔案
-                  </button>
-                  <p id={uploadHelpId} className="text-xs text-slate-500">
-                    支援格式：PDF · PPT · PPTX · Word · Markdown · TXT<br />
-                    最大檔案大小：50MB，一次最多 5 個檔案
+                <div className="flex h-28 w-28 items-center justify-center rounded-[36px] bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-500 text-4xl text-white shadow-xl">
+                  ⬆️
+                </div>
+                <div className="flex max-w-xl flex-col gap-3">
+                  <h1 className="text-3xl font-semibold text-slate-900">上傳您的檔案</h1>
+                  <p className="text-base leading-7 text-slate-600">
+                    將檔案拖放到此處，或點擊任何地方瀏覽檔案。上傳後系統將自動為您整理重點、擷取關鍵字並生成心智圖。
                   </p>
                 </div>
-              </div>
-
-              <div className="flex flex-wrap justify-center gap-4 text-sm font-medium">
-                {fileTypes.map((type) => (
-                  <span
-                    key={type.label}
-                    className={`${type.color} rounded-full bg-white px-3 py-1 shadow-sm`}
-                  >
-                    {type.label}
-                  </span>
-                ))}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="rounded-full bg-slate-900 px-6 py-2 text-sm font-medium text-white shadow-lg transition hover:bg-slate-700"
+                >
+                  選擇檔案
+                </button>
+                <p id={uploadHelpId} className="text-xs leading-6 text-slate-500">
+                  支援格式：PDF · PPT · PPTX · Word · Markdown · TXT
+                  <br />
+                  最大檔案大小：50MB，一次最多 5 個檔案
+                </p>
+                <div className="flex flex-wrap justify-center gap-3 text-sm font-medium">
+                  {fileTypes.map((type) => (
+                    <span
+                      key={type.label}
+                      className={`${type.color} rounded-full bg-white px-3 py-1 shadow-sm`}
+                    >
+                      {type.label}
+                    </span>
+                  ))}
+                </div>
               </div>
 
               {selectedFiles.length > 0 ? (
