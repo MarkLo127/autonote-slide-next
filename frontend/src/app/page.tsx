@@ -546,15 +546,37 @@ export default function Home() {
           </p>
         </div>
         {mindmapResult.mindmap_image_url ? (
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <div className="relative aspect-[16/10] w-full">
-              <Image
-                src={mindmapResult.mindmap_image_url}
-                alt="心智圖預覽"
-                fill
-                className="object-contain"
-                unoptimized
-              />
+          <div className="space-y-4">
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              <div className="relative aspect-[16/10] w-full">
+                <Image
+                  src={mindmapResult.mindmap_image_url}
+                  alt="心智圖預覽"
+                  fill
+                  className="object-contain"
+                  unoptimized
+                />
+              </div>
+            </div>
+            <div className="text-right">
+              <button
+                type="button"
+                onClick={() => window.open(mindmapResult.mindmap_image_url ?? undefined, "_blank")}
+                className="inline-flex items-center gap-2 rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-400 hover:text-slate-800"
+              >
+                放大查看
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  className="h-4 w-4"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10h4.5M19.5 10V5.5M5 19l5.5-5.5M5 19v-4.5" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 9v-2a2.5 2.5 0 0 1 2.5-2.5h2M19.5 15v2a2.5 2.5 0 0 1-2.5 2.5h-2" />
+                </svg>
+              </button>
             </div>
           </div>
         ) : (
@@ -842,7 +864,7 @@ export default function Home() {
           </section>
 
           <section className="relative flex w-full flex-col rounded-[40px] border border-white/60 bg-white/95 p-10 shadow-2xl lg:min-h-[620px] xl:min-h-[700px]">
-            <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-col items-center gap-4 text-center">
               <div>
                 <h2 className="text-3xl font-semibold text-slate-900">檔案預覽</h2>
                 <p className="mt-3 text-base text-slate-600">
@@ -853,7 +875,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setPreviewTab("upload")}
-                  className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                  className={`rounded-full px-5 py-2 text-sm font-medium transition ${
                     previewTab === "upload"
                       ? "bg-slate-900 text-white shadow"
                       : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300"
@@ -865,7 +887,7 @@ export default function Home() {
                   type="button"
                   onClick={() => setPreviewTab("analysis")}
                   disabled={!analysisResult}
-                  className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                  className={`rounded-full px-5 py-2 text-sm font-medium transition ${
                     previewTab === "analysis"
                       ? "bg-slate-900 text-white shadow"
                       : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300"
