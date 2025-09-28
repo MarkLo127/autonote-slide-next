@@ -658,10 +658,6 @@
     overflow: hidden;
   }
 
-  .absolute {
-    position: absolute;
-  }
-
   .fixed {
     position: fixed;
   }
@@ -672,14 +668,6 @@
 
   .inset-0 {
     inset: calc(var(--spacing) * 0);
-  }
-
-  .top-6 {
-    top: calc(var(--spacing) * 6);
-  }
-
-  .left-8 {
-    left: calc(var(--spacing) * 8);
   }
 
   .z-50 {
@@ -735,10 +723,6 @@
     margin-top: calc(var(--spacing) * 10);
   }
 
-  .mt-14 {
-    margin-top: calc(var(--spacing) * 14);
-  }
-
   .mt-auto {
     margin-top: auto;
   }
@@ -779,8 +763,8 @@
     height: calc(var(--spacing) * 12);
   }
 
-  .h-24 {
-    height: calc(var(--spacing) * 24);
+  .h-28 {
+    height: calc(var(--spacing) * 28);
   }
 
   .h-full {
@@ -793,6 +777,10 @@
 
   .max-h-\[320px\] {
     max-height: 320px;
+  }
+
+  .min-h-\[420px\] {
+    min-height: 420px;
   }
 
   .min-h-screen {
@@ -815,8 +803,8 @@
     width: calc(var(--spacing) * 12);
   }
 
-  .w-24 {
-    width: calc(var(--spacing) * 24);
+  .w-28 {
+    width: calc(var(--spacing) * 28);
   }
 
   .w-full {
@@ -959,8 +947,8 @@
     border-radius: 28px;
   }
 
-  .rounded-\[32px\] {
-    border-radius: 32px;
+  .rounded-\[36px\] {
+    border-radius: 36px;
   }
 
   .rounded-\[40px\] {
