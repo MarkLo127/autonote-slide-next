@@ -716,13 +716,13 @@ export default function Home() {
         </button>
       </header>
 
-      <main className="mx-auto mt-6 max-w-6xl px-6 pb-16">
-        <div className="rounded-3xl border border-amber-100 bg-gradient-to-r from-amber-50 to-amber-100/70 px-6 py-4 text-sm text-amber-800 shadow-sm">
+      <main className="mx-auto mt-8 max-w-[1400px] px-8 pb-20 lg:px-10">
+        <div className="rounded-3xl border border-amber-100 bg-gradient-to-r from-amber-50 to-amber-100/70 px-8 py-5 text-sm font-medium text-amber-800 shadow-sm text-center lg:text-base">
           目前僅支援電腦端使用，請使用電腦瀏覽器獲得最佳體驗
         </div>
 
-        <div className="mt-8 grid gap-8 lg:grid-cols-2 lg:items-stretch">
-          <section className="relative flex h-full w-full flex-col overflow-hidden rounded-[36px] border border-white/60 bg-white/90 p-8 shadow-xl lg:aspect-square">
+        <div className="mt-10 grid grid-cols-1 gap-10 xl:grid-cols-2 xl:items-stretch">
+          <section className="relative flex w-full flex-col rounded-[40px] border border-white/60 bg-white/95 p-10 shadow-2xl lg:min-h-[620px] xl:min-h-[700px]">
             <span className="absolute left-8 top-6 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500">
               App Preview
             </span>
@@ -731,10 +731,10 @@ export default function Home() {
                 ⬆️
               </div>
               <div>
-                <h1 className="text-2xl font-semibold text-slate-900">
+                <h1 className="text-3xl font-semibold text-slate-900">
                   上傳您的檔案
                 </h1>
-                <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
+                <p className="mt-3 max-w-xl text-base leading-7 text-slate-600">
                   將檔案拖放到此處，或點擊任何地方瀏覽檔案。上傳後系統將自動為您整理重點、擷取關鍵字並生成心智圖。
                 </p>
               </div>
@@ -841,11 +841,11 @@ export default function Home() {
             </div>
           </section>
 
-          <section className="relative flex h-full w-full flex-col overflow-hidden rounded-[36px] border border-white/60 bg-white/90 p-8 shadow-xl lg:aspect-square">
+          <section className="relative flex w-full flex-col rounded-[40px] border border-white/60 bg-white/95 p-10 shadow-2xl lg:min-h-[620px] xl:min-h-[700px]">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-semibold text-slate-900">檔案預覽</h2>
-                <p className="mt-2 text-sm text-slate-500">
+                <h2 className="text-3xl font-semibold text-slate-900">檔案預覽</h2>
+                <p className="mt-3 text-base text-slate-600">
                   左側上傳檔案後，可在此切換原始檔案與分析結果。
                 </p>
               </div>
