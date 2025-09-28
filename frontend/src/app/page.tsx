@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, type DragEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type DragEvent,
+} from "react";
 import Image from "next/image";
 
 type Paragraph = {
@@ -26,7 +33,7 @@ type AnalyzeResponse = {
   global_summary: string;
   paragraph_summaries: SummaryItem[];
   paragraph_keywords: KeywordItem[];
-  wordcloud_image_url: string;
+  wordcloud_image_url: string | null;
 };
 
 type MindmapResponse = {
@@ -42,6 +49,8 @@ type MindmapResponse = {
 };
 
 type FeatureKey = "summary" | "keywords" | "mindmap";
+type PreviewTab = "upload" | "analysis";
+type FilePreviewKind = "none" | "pdf" | "text" | "image" | "generic";
 
 const rawBackendOrigin =
   process.env.NEXT_PUBLIC_BACKEND_URL ??
@@ -53,6 +62,13 @@ const MINDMAP_ENDPOINT = `${BACKEND_BASE}/mindmap`;
 
 const normalizeOptionalUrl = (url: string) =>
   url ? url.trim().replace(/\/$/, "") : "";
+
+const toAbsoluteUrl = (url: string | null | undefined): string | null => {
+  if (!url) return null;
+  if (/^https?:\/\//i.test(url)) return url;
+  if (url.startsWith("/")) return `${BACKEND_BASE}${url}`;
+  return `${BACKEND_BASE}/${url}`;
+};
 
 const featureConfigs: Array<{
   key: FeatureKey;
@@ -103,6 +119,20 @@ const formatBytes = (bytes: number) => {
   return `${value.toFixed(i === 0 ? 0 : 1)} ${sizes[i]}`;
 };
 
+const isPdfFile = (file: File) =>
+  file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+
+const isTextFile = (file: File) => {
+  const lower = file.name.toLowerCase();
+  return (
+    file.type.startsWith("text/") ||
+    lower.endsWith(".txt") ||
+    lower.endsWith(".md") ||
+    lower.endsWith(".csv")
+  );
+};
+
+const isImageFile = (file: File) => file.type.startsWith("image/");
 
 export default function Home() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -117,6 +147,11 @@ export default function Home() {
     null,
   );
   const [activeFeature, setActiveFeature] = useState<FeatureKey>("summary");
+  const [previewTab, setPreviewTab] = useState<PreviewTab>("upload");
+  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
+  const [filePreviewType, setFilePreviewType] =
+    useState<FilePreviewKind>("none");
+  const [filePreviewContent, setFilePreviewContent] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [mindmapError, setMindmapError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -145,6 +180,66 @@ export default function Home() {
     window.localStorage.setItem("autonote:llmBaseUrl", llmBaseUrl);
   }, [llmBaseUrl, hasLoadedSettings]);
 
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+
+    if (!selectedFiles.length) {
+      setFilePreviewUrl(null);
+      setFilePreviewType("none");
+      setFilePreviewContent("");
+      setPreviewTab("upload");
+      return () => {
+        if (objectUrl) {
+          URL.revokeObjectURL(objectUrl);
+        }
+      };
+    }
+
+    const file = selectedFiles[0];
+    setPreviewTab("upload");
+
+    if (isPdfFile(file)) {
+      objectUrl = URL.createObjectURL(file);
+      if (!cancelled) {
+        setFilePreviewUrl(objectUrl);
+        setFilePreviewType("pdf");
+        setFilePreviewContent("");
+      }
+    } else if (isTextFile(file)) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (!cancelled) {
+          setFilePreviewContent((reader.result as string) ?? "");
+          setFilePreviewUrl(null);
+          setFilePreviewType("text");
+        }
+      };
+      reader.readAsText(file, "utf-8");
+    } else if (isImageFile(file)) {
+      objectUrl = URL.createObjectURL(file);
+      if (!cancelled) {
+        setFilePreviewUrl(objectUrl);
+        setFilePreviewType("image");
+        setFilePreviewContent("");
+      }
+    } else {
+      objectUrl = URL.createObjectURL(file);
+      if (!cancelled) {
+        setFilePreviewUrl(objectUrl);
+        setFilePreviewType("generic");
+        setFilePreviewContent("");
+      }
+    }
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [selectedFiles]);
+
   const handleFilesSelected = useCallback((files: FileList | File[]) => {
     const fileArray = Array.from(files).slice(0, 5);
     if (fileArray.length === 0) return;
@@ -153,6 +248,8 @@ export default function Home() {
     setMindmapError(null);
     setAnalysisResult(null);
     setMindmapResult(null);
+    setActiveFeature("summary");
+    setPreviewTab("upload");
   }, []);
 
   const handleDrop = useCallback(
@@ -213,7 +310,11 @@ export default function Home() {
       }
 
       const data = (await response.json()) as AnalyzeResponse;
-      setAnalysisResult(data);
+      const normalized: AnalyzeResponse = {
+        ...data,
+        wordcloud_image_url: toAbsoluteUrl(data.wordcloud_image_url),
+      };
+      setAnalysisResult(normalized);
       setMindmapResult(null);
     } catch (err) {
       const message =
@@ -258,7 +359,13 @@ export default function Home() {
       }
 
       const data = (await response.json()) as MindmapResponse;
-      setMindmapResult(data);
+      const normalized: MindmapResponse = {
+        ...data,
+        mindmap_file_url: toAbsoluteUrl(data.mindmap_file_url),
+        mindmap_image_url: toAbsoluteUrl(data.mindmap_image_url),
+        source_upload_url: toAbsoluteUrl(data.source_upload_url),
+      };
+      setMindmapResult(normalized);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "心智圖生成時發生未知錯誤";
@@ -285,6 +392,8 @@ export default function Home() {
     setMindmapResult(null);
     setError(null);
     setMindmapError(null);
+    setActiveFeature("summary");
+    setPreviewTab("upload");
   }, []);
 
   const renderSummary = () => {
@@ -315,7 +424,7 @@ export default function Home() {
         </div>
         <div>
           <h3 className="text-lg font-semibold text-slate-800">段落摘要</h3>
-          <div className="mt-4 space-y-4 max-h-[320px] overflow-y-auto pr-2">
+          <div className="mt-4 max-h-[320px] space-y-4 overflow-y-auto pr-2">
             {analysisResult.paragraph_summaries.map((item) => {
               const paragraph = analysisResult.paragraphs.find(
                 (p) => p.index === item.paragraph_index,
@@ -343,6 +452,50 @@ export default function Home() {
             )}
           </div>
         </div>
+      </div>
+    );
+  };
+
+  const renderKeywords = () => {
+    if (!analysisResult) {
+      return (
+        <p className="text-slate-500">
+          先分析檔案後，即可在此查看每段的關鍵字摘要。
+        </p>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        <div className="max-h-[320px] space-y-6 overflow-y-auto pr-2">
+          {analysisResult.paragraph_keywords.map((item) => (
+            <div
+              key={item.paragraph_index}
+              className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm"
+            >
+              <p className="text-sm font-semibold text-slate-600">
+                第 {item.paragraph_index + 1} 段
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {item.keywords.length ? (
+                  item.keywords.map((kw) => (
+                    <span
+                      key={kw}
+                      className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-600"
+                    >
+                      {kw}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-slate-400">無關鍵字資料</span>
+                )}
+              </div>
+            </div>
+          ))}
+          {analysisResult.paragraph_keywords.length === 0 && (
+            <p className="text-slate-500">尚未取得關鍵字資料。</p>
+          )}
+        </div>
         {analysisResult.wordcloud_image_url ? (
           <div>
             <h3 className="text-lg font-semibold text-slate-800">文字雲</h3>
@@ -358,48 +511,8 @@ export default function Home() {
               </div>
             </div>
           </div>
-        ) : null}
-      </div>
-    );
-  };
-
-  const renderKeywords = () => {
-    if (!analysisResult) {
-      return (
-        <p className="text-slate-500">
-          先分析檔案後，即可在此查看每段的關鍵字摘要。
-        </p>
-      );
-    }
-
-    return (
-      <div className="space-y-6 max-h-[480px] overflow-y-auto pr-2">
-        {analysisResult.paragraph_keywords.map((item) => (
-          <div
-            key={item.paragraph_index}
-            className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm"
-          >
-            <p className="text-sm font-semibold text-slate-600">
-              第 {item.paragraph_index + 1} 段
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {item.keywords.length ? (
-                item.keywords.map((kw) => (
-                  <span
-                    key={kw}
-                    className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-600"
-                  >
-                    {kw}
-                  </span>
-                ))
-              ) : (
-                <span className="text-slate-400">無關鍵字資料</span>
-              )}
-            </div>
-          </div>
-        ))}
-        {analysisResult.paragraph_keywords.length === 0 && (
-          <p className="text-slate-500">尚未取得關鍵字資料。</p>
+        ) : (
+          <p className="text-slate-500">尚未取得文字雲圖片。</p>
         )}
       </div>
     );
@@ -417,7 +530,7 @@ export default function Home() {
     if (!mindmapResult) {
       return (
         <p className="text-slate-500">
-          點擊下方「心智圖生成」後，將於此顯示自動生成的圖像與下載連結。
+          點擊下方「心智圖生成」後，將於此顯示自動生成的圖像與摘要。
         </p>
       );
     }
@@ -447,49 +560,130 @@ export default function Home() {
         ) : (
           <p className="text-slate-500">暫無心智圖圖片可預覽。</p>
         )}
-        <div className="flex flex-wrap items-center gap-4">
-          {mindmapResult.mindmap_file_url ? (
-            <a
-              href={mindmapResult.mindmap_file_url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm"
-            >
-              下載 Mermaid 檔案
-            </a>
-          ) : null}
-          {mindmapResult.source_upload_url ? (
-            <a
-              href={mindmapResult.source_upload_url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2 rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600"
-            >
-              檔案儲存路徑
-            </a>
-          ) : null}
+      </div>
+    );
+  };
+
+  const renderUploadPreview = () => {
+    if (!selectedFiles.length) {
+      return (
+        <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white/70 p-6 text-sm text-slate-500">
+          上傳檔案後即可在此預覽原始內容。
+        </div>
+      );
+    }
+
+    if (filePreviewType === "pdf" && filePreviewUrl) {
+      return (
+        <iframe
+          title="檔案預覽"
+          src={filePreviewUrl}
+          className="h-full w-full rounded-2xl border border-slate-200 bg-white"
+        />
+      );
+    }
+
+    if (filePreviewType === "image" && filePreviewUrl) {
+      return (
+        <div className="relative h-full w-full overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <Image
+            src={filePreviewUrl}
+            alt="選擇的圖片預覽"
+            fill
+            className="object-contain"
+            unoptimized
+          />
+        </div>
+      );
+    }
+
+    if (filePreviewType === "text") {
+      return (
+        <div className="h-full overflow-y-auto rounded-2xl border border-slate-200 bg-white/90 p-4">
+          <pre className="whitespace-pre-wrap text-sm leading-6 text-slate-700">
+            {filePreviewContent}
+          </pre>
+        </div>
+      );
+    }
+
+    if (filePreviewType === "generic" && filePreviewUrl) {
+      return (
+        <iframe
+          title="檔案預覽"
+          src={filePreviewUrl}
+          className="h-full w-full rounded-2xl border border-slate-200 bg-white"
+        />
+      );
+    }
+
+    return (
+      <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white/70 p-6 text-sm text-slate-500">
+        此檔案格式暫不支援內嵌預覽，請重新選擇其他檔案。
+      </div>
+    );
+  };
+
+  const renderAnalysisPanel = () => {
+    if (!analysisResult) {
+      return (
+        <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white/70 p-6 text-sm text-slate-500">
+          請先完成分析，或點擊「開始分析」後再試一次。
+        </div>
+      );
+    }
+
+    const renderActiveFeature = () => {
+      if (activeFeature === "summary") return renderSummary();
+      if (activeFeature === "keywords") return renderKeywords();
+      return renderMindmap();
+    };
+
+    return (
+      <div className="flex h-full flex-col">
+        <div className="grid gap-3 sm:grid-cols-3">
+          {featureConfigs.map((feature) => {
+            const isActive = activeFeature === feature.key;
+            return (
+              <button
+                key={feature.key}
+                type="button"
+                onClick={() => handleFeatureSelect(feature.key)}
+                className={`flex flex-col gap-1 rounded-3xl border px-4 py-4 text-left transition ${
+                  isActive
+                    ? `border-transparent bg-gradient-to-r ${feature.accent} text-white`
+                    : "border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:text-indigo-600"
+                }`}
+              >
+                <span className="text-2xl">{feature.icon}</span>
+                <span className="text-base font-semibold">{feature.label}</span>
+                <span
+                  className={`text-sm ${
+                    isActive ? "text-white/80" : "text-slate-500"
+                  }`}
+                >
+                  {feature.description}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-6 flex-1 overflow-y-auto pr-1">
+          {renderActiveFeature()}
         </div>
       </div>
     );
   };
 
-  let previewContent;
-  if (activeFeature === "summary") {
-    previewContent = renderSummary();
-  } else if (activeFeature === "keywords") {
-    previewContent = renderKeywords();
-  } else {
-    previewContent = renderMindmap();
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f6f8ff] via-[#f4f7fb] to-[#edf1ff] text-slate-900">
-      <header className="flex items-center justify-between px-8 pt-8">
-        <div className="flex items-center gap-4">
+      <header className="grid grid-cols-[1fr_auto_1fr] items-center px-8 pt-8">
+        <div aria-hidden />
+        <div className="col-start-2 col-end-3 flex items-center justify-center gap-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-blue-500 text-2xl text-white shadow-lg">
             📄
           </div>
-          <div>
+          <div className="text-center">
             <p className="text-xl font-semibold text-slate-900">AutoNote & Slide</p>
             <p className="text-sm text-slate-500">智慧文檔處理平台</p>
           </div>
@@ -497,7 +691,7 @@ export default function Home() {
         <button
           type="button"
           onClick={() => setSettingsOpen(true)}
-          className="group relative flex h-11 w-11 items-center justify-center rounded-2xl border border-white/60 bg-white/80 shadow-lg transition hover:shadow-xl"
+          className="group col-start-3 col-end-4 justify-self-end rounded-2xl border border-white/60 bg-white/80 p-3 shadow-lg transition hover:shadow-xl"
           aria-label="開啟 API 設定"
         >
           <svg
@@ -527,12 +721,12 @@ export default function Home() {
           目前僅支援電腦端使用，請使用電腦瀏覽器獲得最佳體驗
         </div>
 
-        <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,420px)_1fr]">
-          <section className="relative overflow-hidden rounded-[36px] border border-white/60 bg-white/90 p-8 shadow-xl">
+        <div className="mt-8 grid gap-8 lg:grid-cols-2 lg:items-stretch">
+          <section className="relative flex h-full w-full flex-col overflow-hidden rounded-[36px] border border-white/60 bg-white/90 p-8 shadow-xl lg:aspect-square">
             <span className="absolute left-8 top-6 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500">
               App Preview
             </span>
-            <div className="mt-14 flex flex-col items-center gap-6 text-center">
+            <div className="mt-14 flex flex-1 flex-col items-center gap-6 text-center">
               <div className="flex h-24 w-24 items-center justify-center rounded-[32px] bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-500 text-4xl text-white shadow-xl">
                 ⬆️
               </div>
@@ -612,7 +806,7 @@ export default function Home() {
                       清除
                     </button>
                   </div>
-                  <ul className="mt-3 space-y-2">
+                  <ul className="mt-3 max-h-[160px] space-y-2 overflow-y-auto">
                     {selectedFiles.map((file) => (
                       <li
                         key={file.name}
@@ -640,50 +834,53 @@ export default function Home() {
                 type="button"
                 onClick={handleAnalyze}
                 disabled={isAnalyzing}
-                className="inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-500 to-blue-500 px-6 py-3 text-base font-semibold text-white shadow-lg transition hover:from-indigo-600 hover:to-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
+                className="mt-auto inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-500 to-blue-500 px-6 py-3 text-base font-semibold text-white shadow-lg transition hover:from-indigo-600 hover:to-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isAnalyzing ? "分析中…" : "開始分析"}
               </button>
             </div>
-
-            <div className="mt-10 grid gap-4 sm:grid-cols-3">
-              {featureConfigs.map((feature) => {
-                const isActive = activeFeature === feature.key;
-                return (
-                  <button
-                    key={feature.key}
-                    type="button"
-                    onClick={() => handleFeatureSelect(feature.key)}
-                    className={`flex flex-col gap-1 rounded-3xl border p-4 text-left shadow transition ${isActive ? "border-transparent bg-gradient-to-r text-white" : "border-slate-200 bg-white text-slate-700"} ${isActive ? feature.accent : ""}`}
-                  >
-                    <span className="text-2xl">{feature.icon}</span>
-                    <span className="text-base font-semibold">
-                      {feature.label}
-                    </span>
-                    <span
-                      className={`text-sm ${isActive ? "text-white/80" : "text-slate-500"}`}
-                    >
-                      {feature.description}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
           </section>
 
-          <section className="rounded-[36px] border border-white/60 bg-white/90 p-8 shadow-xl">
-            <h2 className="text-2xl font-semibold text-slate-900">檔案預覽</h2>
-            <p className="mt-2 text-sm text-slate-500">
-              上傳檔案後可在此預覽和處理結果
-            </p>
-            <div className="mt-6 min-h-[420px] space-y-6">
-              {selectedFileName ? (
-                <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-600">
-                  <span className="font-medium text-slate-800">目前檔案：</span>
-                  {selectedFileName}
-                </div>
-              ) : null}
-              {previewContent}
+          <section className="relative flex h-full w-full flex-col overflow-hidden rounded-[36px] border border-white/60 bg-white/90 p-8 shadow-xl lg:aspect-square">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-semibold text-slate-900">檔案預覽</h2>
+                <p className="mt-2 text-sm text-slate-500">
+                  左側上傳檔案後，可在此切換原始檔案與分析結果。
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPreviewTab("upload")}
+                  className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                    previewTab === "upload"
+                      ? "bg-slate-900 text-white shadow"
+                      : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                  }`}
+                >
+                  上傳檔案預覽
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewTab("analysis")}
+                  disabled={!analysisResult}
+                  className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                    previewTab === "analysis"
+                      ? "bg-slate-900 text-white shadow"
+                      : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                  } ${!analysisResult ? "cursor-not-allowed opacity-50" : ""}`}
+                >
+                  分析結果
+                </button>
+              </div>
+            </div>
+            <div className="mt-6 flex-1 overflow-hidden rounded-[28px] bg-slate-50/90 p-4">
+              {previewTab === "upload" ? (
+                <div className="h-full w-full">{renderUploadPreview()}</div>
+              ) : (
+                <div className="h-full w-full">{renderAnalysisPanel()}</div>
+              )}
             </div>
           </section>
         </div>
@@ -730,11 +927,11 @@ export default function Home() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700" htmlFor="llmBaseUrl">
+                <label className="text-sm font-medium text-slate-700" htmlFor="llmBaseUrlInput">
                   LLM Base URL（可選填）
                 </label>
                 <input
-                  id="llmBaseUrl"
+                  id="llmBaseUrlInput"
                   type="url"
                   value={llmBaseUrl}
                   onChange={(event) => setLlmBaseUrl(event.target.value)}
