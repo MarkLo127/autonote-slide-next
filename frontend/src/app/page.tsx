@@ -50,6 +50,8 @@ type MindmapResponse = {
 
 type FilePreviewKind = "none" | "pdf" | "text" | "image" | "generic";
 
+type FeatureKey = "summary" | "keywords" | "mindmap";
+
 const rawBackendOrigin =
   process.env.NEXT_PUBLIC_BACKEND_URL ??
   process.env.NEXT_PUBLIC_API_BASE_URL ??
@@ -119,6 +121,7 @@ export default function Home() {
   const [filePreviewType, setFilePreviewType] =
     useState<FilePreviewKind>("none");
   const [filePreviewContent, setFilePreviewContent] = useState("");
+  const [activeFeature, setActiveFeature] = useState<FeatureKey>("summary");
   const [error, setError] = useState<string | null>(null);
   const [mindmapError, setMindmapError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
