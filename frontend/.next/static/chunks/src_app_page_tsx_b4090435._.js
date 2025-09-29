@@ -1181,7 +1181,7 @@ function Home() {
                                                             lineNumber: 790,
                                                             columnNumber: 19
                                                         }, this),
-                                                        "最大檔案大小：50MB，一次最多 5 個檔案"
+                                                        "最大檔案大小：50MB，一次最多 1 個檔案"
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/src/app/page.tsx",

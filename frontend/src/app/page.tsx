@@ -788,7 +788,7 @@ export default function Home() {
                 <p id={uploadHelpId} className="text-xs leading-6 text-slate-500">
                   支援格式：PDF · PPT · PPTX · Word · Markdown · TXT
                   <br />
-                  最大檔案大小：50MB，一次最多 5 個檔案
+                  最大檔案大小：50MB，一次最多 1 個檔案
                 </p>
                 <div className="flex flex-wrap justify-center gap-3 text-sm font-medium">
                   {fileTypes.map((type) => (
