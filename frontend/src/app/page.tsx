@@ -48,7 +48,6 @@ type MindmapResponse = {
   source_upload_url?: string | null;
 };
 
-type FeatureKey = "summary" | "keywords" | "mindmap";
 type FilePreviewKind = "none" | "pdf" | "text" | "image" | "generic";
 
 const rawBackendOrigin =
@@ -69,36 +68,6 @@ const toAbsoluteUrl = (url: string | null | undefined): string | null => {
   if (url.startsWith("/")) return `${BACKEND_BASE}${url}`;
   return `${BACKEND_BASE}/${url}`;
 };
-
-const featureConfigs: Array<{
-  key: FeatureKey;
-  label: string;
-  description: string;
-  icon: string;
-  accent: string;
-}> = [
-  {
-    key: "summary",
-    label: "摘要整理",
-    description: "自動彙整重點內容",
-    icon: "📝",
-    accent: "from-blue-500 to-indigo-500",
-  },
-  {
-    key: "keywords",
-    label: "關鍵字擷取",
-    description: "擷取每段文字焦點",
-    icon: "🔍",
-    accent: "from-emerald-500 to-green-500",
-  },
-  {
-    key: "mindmap",
-    label: "心智圖生成",
-    description: "建立視覺化脈絡",
-    icon: "🧠",
-    accent: "from-orange-500 to-amber-500",
-  },
-];
 
 const fileTypes = [
   { label: "PDF", color: "text-rose-500" },
@@ -146,7 +115,6 @@ export default function Home() {
   const [mindmapResult, setMindmapResult] = useState<MindmapResponse | null>(
     null,
   );
-  const [activeFeature, setActiveFeature] = useState<FeatureKey>("summary");
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
   const [filePreviewType, setFilePreviewType] =
     useState<FilePreviewKind>("none");
@@ -264,7 +232,6 @@ export default function Home() {
     setMindmapError(null);
     setAnalysisResult(null);
     setMindmapResult(null);
-    setActiveFeature("summary");
     setAnalysisCompleteMessage(null);
   }, []);
 
@@ -669,49 +636,50 @@ export default function Home() {
     if (!analysisResult) {
       return (
         <div className="flex min-h-[240px] items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-white/80 p-8 text-sm text-slate-500">
-          完成檔案分析後，整理好的摘要與重點將顯示於此處。
+          完成檔案分析後，整理好的摘要、關鍵字與心智圖將顯示於此處。
         </div>
       );
     }
 
-    const renderActiveFeature = () => {
-      if (activeFeature === "summary") return renderSummary();
-      if (activeFeature === "keywords") return renderKeywords();
-      return renderMindmap();
-    };
-
     return (
-      <div className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-inner">
-        <div className="grid gap-3 sm:grid-cols-3">
-          {featureConfigs.map((feature) => {
-            const isActive = activeFeature === feature.key;
-            return (
-              <button
-                key={feature.key}
-                type="button"
-                onClick={() => handleFeatureSelect(feature.key)}
-                className={`flex flex-col gap-1 rounded-3xl border px-4 py-4 text-left transition ${
-                  isActive
-                    ? `border-transparent bg-gradient-to-r ${feature.accent} text-white`
-                    : "border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:text-indigo-600"
-                }`}
-              >
-                <span className="text-2xl">{feature.icon}</span>
-                <span className="text-base font-semibold">{feature.label}</span>
-                <span
-                  className={`text-sm ${
-                    isActive ? "text-white/80" : "text-slate-500"
-                  }`}
-                >
-                  {feature.description}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        <div className="mt-6 max-h-[520px] overflow-y-auto pr-1">
-          {renderActiveFeature()}
-        </div>
+      <div className="space-y-8">
+        <section className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-inner">
+          <div className="flex flex-col gap-2">
+            <h3 className="text-xl font-semibold text-slate-900">摘要整理</h3>
+            <p className="text-sm text-slate-500">包含全局摘要與各段重點內容。</p>
+          </div>
+          <div className="mt-6 space-y-6">{renderSummary()}</div>
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-inner">
+          <div className="flex flex-col gap-2">
+            <h3 className="text-xl font-semibold text-slate-900">關鍵字整理</h3>
+            <p className="text-sm text-slate-500">每段的核心關鍵字與文字雲圖像。</p>
+          </div>
+          <div className="mt-6 space-y-6">{renderKeywords()}</div>
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-inner">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-2">
+              <h3 className="text-xl font-semibold text-slate-900">心智圖生成</h3>
+              <p className="text-sm text-slate-500">視覺化呈現段落主題與概念連結。</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void ensureMindmap()}
+              disabled={isMindmapLoading || !selectedFiles.length}
+              className={`inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-medium transition ${
+                isMindmapLoading || !selectedFiles.length
+                  ? "cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400"
+                  : "border border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:text-indigo-600"
+              }`}
+            >
+              {isMindmapLoading ? "心智圖生成中…" : "生成心智圖"}
+            </button>
+          </div>
+          <div className="mt-6 space-y-6">{renderMindmap()}</div>
+        </section>
       </div>
     );
   };
