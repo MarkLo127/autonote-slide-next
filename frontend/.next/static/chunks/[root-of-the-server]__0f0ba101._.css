@@ -735,6 +735,10 @@
     margin-top: auto;
   }
 
+  .mb-6 {
+    margin-bottom: calc(var(--spacing) * 6);
+  }
+
   .flex {
     display: flex;
   }
@@ -789,6 +793,10 @@
 
   .min-h-\[240px\] {
     min-height: 240px;
+  }
+
+  .min-h-\[400px\] {
+    min-height: 400px;
   }
 
   .min-h-\[420px\] {

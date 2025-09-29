@@ -644,44 +644,79 @@ export default function Home() {
       );
     }
 
-    return (
-      <div className="space-y-8">
-        <section className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-inner">
-          <div className="flex flex-col gap-2">
-            <h3 className="text-xl font-semibold text-slate-900">摘要整理</h3>
-            <p className="text-sm text-slate-500">包含全局摘要與各段重點內容。</p>
-          </div>
-          <div className="mt-6 space-y-6">{renderSummary()}</div>
-        </section>
+    const features = [
+      { key: "summary" as FeatureKey, label: "摘要整理", description: "包含全局摘要與各段重點內容" },
+      { key: "keywords" as FeatureKey, label: "關鍵字整理", description: "每段的核心關鍵字與文字雲圖像" },
+      { key: "mindmap" as FeatureKey, label: "心智圖生成", description: "視覺化呈現段落主題與概念連結" },
+    ];
 
-        <section className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-inner">
-          <div className="flex flex-col gap-2">
-            <h3 className="text-xl font-semibold text-slate-900">關鍵字整理</h3>
-            <p className="text-sm text-slate-500">每段的核心關鍵字與文字雲圖像。</p>
-          </div>
-          <div className="mt-6 space-y-6">{renderKeywords()}</div>
-        </section>
-
-        <section className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-inner">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-col gap-2">
-              <h3 className="text-xl font-semibold text-slate-900">心智圖生成</h3>
-              <p className="text-sm text-slate-500">視覺化呈現段落主題與概念連結。</p>
+    const renderActiveContent = () => {
+      switch (activeFeature) {
+        case "summary":
+          return renderSummary();
+        case "keywords":
+          return renderKeywords();
+        case "mindmap":
+          return (
+            <div className="space-y-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex-1">
+                  <p className="text-sm text-slate-500">視覺化呈現段落主題與概念連結。</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void ensureMindmap()}
+                  disabled={isMindmapLoading || !selectedFiles.length}
+                  className={`inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-medium transition ${
+                    isMindmapLoading || !selectedFiles.length
+                      ? "cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400"
+                      : "border border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:text-indigo-600"
+                  }`}
+                >
+                  {isMindmapLoading ? "心智圖生成中…" : "生成心智圖"}
+                </button>
+              </div>
+              {renderMindmap()}
             </div>
+          );
+        default:
+          return renderSummary();
+      }
+    };
+
+    return (
+      <div className="space-y-6">
+        {/* Feature Navigation Buttons */}
+        <div className="flex flex-wrap gap-3 justify-center">
+          {features.map((feature) => (
             <button
+              key={feature.key}
               type="button"
-              onClick={() => void ensureMindmap()}
-              disabled={isMindmapLoading || !selectedFiles.length}
-              className={`inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-medium transition ${
-                isMindmapLoading || !selectedFiles.length
-                  ? "cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400"
+              onClick={() => handleFeatureSelect(feature.key)}
+              className={`inline-flex items-center justify-center rounded-full px-6 py-3 text-sm font-medium transition ${
+                activeFeature === feature.key
+                  ? "bg-gradient-to-r from-indigo-500 to-blue-500 text-white shadow-lg"
                   : "border border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:text-indigo-600"
               }`}
             >
-              {isMindmapLoading ? "心智圖生成中…" : "生成心智圖"}
+              {feature.label}
             </button>
+          ))}
+        </div>
+
+        {/* Active Feature Content */}
+        <section className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-inner min-h-[400px]">
+          <div className="flex flex-col gap-2 mb-6">
+            <h3 className="text-xl font-semibold text-slate-900">
+              {features.find(f => f.key === activeFeature)?.label}
+            </h3>
+            <p className="text-sm text-slate-500">
+              {features.find(f => f.key === activeFeature)?.description}
+            </p>
           </div>
-          <div className="mt-6 space-y-6">{renderMindmap()}</div>
+          <div className="space-y-6">
+            {renderActiveContent()}
+          </div>
         </section>
       </div>
     );
