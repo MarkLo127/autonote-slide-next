@@ -49,7 +49,6 @@ type MindmapResponse = {
 };
 
 type FeatureKey = "summary" | "keywords" | "mindmap";
-type PreviewTab = "upload" | "analysis";
 type FilePreviewKind = "none" | "pdf" | "text" | "image" | "generic";
 
 const rawBackendOrigin =
@@ -59,6 +58,7 @@ const rawBackendOrigin =
 const BACKEND_BASE = rawBackendOrigin.replace(/\/$/, "");
 const ANALYZE_ENDPOINT = `${BACKEND_BASE}/analyze`;
 const MINDMAP_ENDPOINT = `${BACKEND_BASE}/mindmap`;
+const DEFAULT_LLM_BASE_URL = "https://api.openai.com/v1";
 
 const normalizeOptionalUrl = (url: string) =>
   url ? url.trim().replace(/\/$/, "") : "";
@@ -147,7 +147,6 @@ export default function Home() {
     null,
   );
   const [activeFeature, setActiveFeature] = useState<FeatureKey>("summary");
-  const [previewTab, setPreviewTab] = useState<PreviewTab>("upload");
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
   const [filePreviewType, setFilePreviewType] =
     useState<FilePreviewKind>("none");
@@ -156,17 +155,23 @@ export default function Home() {
   const [mindmapError, setMindmapError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [apiKey, setApiKey] = useState("");
-  const [llmBaseUrl, setLlmBaseUrl] = useState("");
+  const [llmBaseUrl, setLlmBaseUrl] = useState(DEFAULT_LLM_BASE_URL);
   const [hasLoadedSettings, setHasLoadedSettings] = useState(false);
+  const [analysisCompleteMessage, setAnalysisCompleteMessage] =
+    useState<string | null>(null);
   const fileInputId = useId();
   const uploadHelpId = `${fileInputId}-help`;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const storedKey = window.localStorage.getItem("autonote:llmApiKey") ?? "";
-    const storedBase = window.localStorage.getItem("autonote:llmBaseUrl") ?? "";
+    const storedBase = window.localStorage.getItem("autonote:llmBaseUrl");
     setApiKey(storedKey);
-    setLlmBaseUrl(storedBase);
+    setLlmBaseUrl(
+      storedBase && storedBase.trim().length > 0
+        ? storedBase
+        : DEFAULT_LLM_BASE_URL,
+    );
     setHasLoadedSettings(true);
   }, []);
 
@@ -181,6 +186,19 @@ export default function Home() {
   }, [llmBaseUrl, hasLoadedSettings]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    if (!analysisCompleteMessage) return undefined;
+
+    const timer = window.setTimeout(() => {
+      setAnalysisCompleteMessage(null);
+    }, 4000);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [analysisCompleteMessage]);
+
+  useEffect(() => {
     let objectUrl: string | null = null;
     let cancelled = false;
 
@@ -188,7 +206,6 @@ export default function Home() {
       setFilePreviewUrl(null);
       setFilePreviewType("none");
       setFilePreviewContent("");
-      setPreviewTab("upload");
       return () => {
         if (objectUrl) {
           URL.revokeObjectURL(objectUrl);
@@ -197,7 +214,6 @@ export default function Home() {
     }
 
     const file = selectedFiles[0];
-    setPreviewTab("upload");
 
     if (isPdfFile(file)) {
       objectUrl = URL.createObjectURL(file);
@@ -249,7 +265,7 @@ export default function Home() {
     setAnalysisResult(null);
     setMindmapResult(null);
     setActiveFeature("summary");
-    setPreviewTab("upload");
+    setAnalysisCompleteMessage(null);
   }, []);
 
   const handleDrop = useCallback(
@@ -286,6 +302,7 @@ export default function Home() {
     }
 
     setIsAnalyzing(true);
+    setAnalysisCompleteMessage(null);
     setError(null);
     setMindmapError(null);
     setActiveFeature("summary");
@@ -316,12 +333,14 @@ export default function Home() {
       };
       setAnalysisResult(normalized);
       setMindmapResult(null);
+      setAnalysisCompleteMessage("分析結果已完成");
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "分析時發生未知錯誤";
       setError(message);
       setAnalysisResult(null);
       setMindmapResult(null);
+      setAnalysisCompleteMessage(null);
     } finally {
       setIsAnalyzing(false);
     }
@@ -393,7 +412,7 @@ export default function Home() {
     setError(null);
     setMindmapError(null);
     setActiveFeature("summary");
-    setPreviewTab("upload");
+    setAnalysisCompleteMessage(null);
   }, []);
 
   const renderSummary = () => {
@@ -649,8 +668,8 @@ export default function Home() {
   const renderAnalysisPanel = () => {
     if (!analysisResult) {
       return (
-        <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white/70 p-6 text-sm text-slate-500">
-          請先完成分析，或點擊「開始分析」後再試一次。
+        <div className="flex min-h-[240px] items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-white/80 p-8 text-sm text-slate-500">
+          完成檔案分析後，整理好的摘要與重點將顯示於此處。
         </div>
       );
     }
@@ -662,7 +681,7 @@ export default function Home() {
     };
 
     return (
-      <div className="flex h-full flex-col">
+      <div className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-inner">
         <div className="grid gap-3 sm:grid-cols-3">
           {featureConfigs.map((feature) => {
             const isActive = activeFeature === feature.key;
@@ -690,7 +709,7 @@ export default function Home() {
             );
           })}
         </div>
-        <div className="mt-6 flex-1 overflow-y-auto pr-1">
+        <div className="mt-6 max-h-[520px] overflow-y-auto pr-1">
           {renderActiveFeature()}
         </div>
       </div>
@@ -699,6 +718,11 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f6f8ff] via-[#f4f7fb] to-[#edf1ff] text-slate-900">
+      {analysisCompleteMessage ? (
+        <div className="fixed right-6 top-6 z-50 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-semibold text-emerald-700 shadow-lg">
+          {analysisCompleteMessage}
+        </div>
+      ) : null}
       <header className="grid grid-cols-[1fr_auto_1fr] items-center px-8 pt-8">
         <div aria-hidden />
         <div className="col-start-2 col-end-3 flex items-center justify-center gap-4">
@@ -743,7 +767,8 @@ export default function Home() {
           目前僅支援電腦端使用，請使用電腦瀏覽器獲得最佳體驗
         </div>
 
-        <div className="mt-10 grid grid-cols-1 gap-10 xl:grid-cols-2 xl:items-stretch">
+        <div className="mt-10 space-y-10">
+          <div className="grid grid-cols-1 gap-10 xl:grid-cols-2 xl:items-stretch">
           <section className="relative flex w-full flex-col rounded-[40px] border border-white/60 bg-white/95 p-10 shadow-2xl lg:min-h-[620px] xl:min-h-[700px]">
             <div className="mt-10 flex flex-1 flex-col items-center gap-6 text-center">
               <div
@@ -861,42 +886,26 @@ export default function Home() {
               <div>
                 <h2 className="text-3xl font-semibold text-slate-900">檔案預覽</h2>
                 <p className="mt-3 text-base text-slate-600">
-                  左側上傳檔案後，可在此切換原始檔案與分析結果。
+                  左側上傳檔案後，可在此預覽原始檔案內容。
                 </p>
-              </div>
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setPreviewTab("upload")}
-                  className={`rounded-full px-5 py-2 text-sm font-medium transition ${
-                    previewTab === "upload"
-                      ? "bg-slate-900 text-white shadow"
-                      : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300"
-                  }`}
-                >
-                  上傳檔案預覽
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewTab("analysis")}
-                  disabled={!analysisResult}
-                  className={`rounded-full px-5 py-2 text-sm font-medium transition ${
-                    previewTab === "analysis"
-                      ? "bg-slate-900 text-white shadow"
-                      : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300"
-                  } ${!analysisResult ? "cursor-not-allowed opacity-50" : ""}`}
-                >
-                  分析結果
-                </button>
               </div>
             </div>
             <div className="mt-6 flex-1 overflow-hidden rounded-[28px] bg-slate-50/90 p-4">
-              {previewTab === "upload" ? (
-                <div className="h-full w-full">{renderUploadPreview()}</div>
-              ) : (
-                <div className="h-full w-full">{renderAnalysisPanel()}</div>
-              )}
+              <div className="h-full w-full">{renderUploadPreview()}</div>
             </div>
+          </section>
+          </div>
+
+          <section className="relative w-full rounded-[40px] border border-white/60 bg-white/95 p-10 shadow-2xl">
+            <div className="flex flex-col items-center gap-4 text-center">
+              <div>
+                <h2 className="text-3xl font-semibold text-slate-900">分析結果整理</h2>
+                <p className="mt-3 text-base text-slate-600">
+                  檔案分析完成後，摘要、關鍵字與心智圖會集中顯示在此區域。
+                </p>
+              </div>
+            </div>
+            <div className="mt-6">{renderAnalysisPanel()}</div>
           </section>
         </div>
       </main>
@@ -950,11 +959,11 @@ export default function Home() {
                   type="url"
                   value={llmBaseUrl}
                   onChange={(event) => setLlmBaseUrl(event.target.value)}
-                  placeholder="https://api.example.com"
+                  placeholder="https://api.openai.com/v1"
                   className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-inner focus:border-indigo-400 focus:outline-none"
                 />
                 <p className="mt-2 text-xs text-slate-400">
-                  若不填寫將使用後端預設的 base url。
+                  若未填寫將沿用預設 base url：https://api.openai.com/v1。
                 </p>
               </div>
             </div>
