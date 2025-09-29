@@ -1,4 +1,4 @@
-## Autonote&Slide
+# Autonote&Slide
 
 
 ### 1. 克隆專案
@@ -22,4 +22,19 @@ pnpm -C frontend dev
 ```bash
 pip install -r backend/requirements.txt
 python -m backend
+```
+
+### 5. 使用 Docker Compose 一鍵啟動
+
+### 若已安裝 Docker 與 Docker Compose，可以直接在專案根目錄執行：
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+### 停止服務：
+
+```bash
+docker compose down
 ```
