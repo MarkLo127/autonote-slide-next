@@ -29,7 +29,6 @@ python -m backend
 ### 若已安裝 Docker 與 Docker Compose，可以直接在專案根目錄執行：
 
 ```bash
-docker compose build
 docker compose up -d
 ```
 
