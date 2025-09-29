@@ -943,7 +943,7 @@ export default function Home() {
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700" htmlFor="llmBaseUrlInput">
-                  LLM Base URL（可選填）
+                  base url（可選填）
                 </label>
                 <input
                   id="llmBaseUrlInput"
@@ -954,7 +954,7 @@ export default function Home() {
                   className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-inner focus:border-indigo-400 focus:outline-none"
                 />
                 <p className="mt-2 text-xs text-slate-400">
-                  若不填寫將使用後端預設的 LLM Base URL。
+                  若不填寫將使用後端預設的 base url。
                 </p>
               </div>
             </div>
