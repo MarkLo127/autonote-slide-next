@@ -1,5 +1,25 @@
-from pydantic import BaseModel
 from typing import List, Optional
+
+from pydantic import BaseModel
+
+
+class PageSummary(BaseModel):
+    page_number: int
+    classification: str
+    bullets: List[str]
+    skipped: bool
+    skip_reason: Optional[str] = None
+
+
+class GlobalSummaryExpansions(BaseModel):
+    key_conclusions: str
+    core_data: str
+    risks_and_actions: str
+
+
+class GlobalSummary(BaseModel):
+    bullets: List[str]
+    expansions: GlobalSummaryExpansions
 
 class LLMSettings(BaseModel):
     api_key: str
@@ -22,8 +42,7 @@ class KeywordItem(BaseModel):
 
 class AnalyzeResponse(BaseModel):
     language: str
-    paragraphs: List[Paragraph]
-    global_summary: str
-    paragraph_summaries: List[SummaryItem]
-    paragraph_keywords: List[KeywordItem]
-    wordcloud_image_url: str
+    total_pages: int
+    page_summaries: List[PageSummary]
+    global_summary: GlobalSummary
+    system_prompt: Optional[str] = None

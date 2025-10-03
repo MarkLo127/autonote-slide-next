@@ -17,23 +17,36 @@ type Paragraph = {
   end_char: number;
 };
 
-type SummaryItem = {
-  paragraph_index: number;
-  summary: string;
-};
-
 type KeywordItem = {
   paragraph_index: number;
   keywords: string[];
 };
 
+type PageSummary = {
+  page_number: number;
+  classification: string;
+  bullets: string[];
+  skipped: boolean;
+  skip_reason?: string | null;
+};
+
+type GlobalSummaryExpansions = {
+  key_conclusions: string;
+  core_data: string;
+  risks_and_actions: string;
+};
+
+type GlobalSummary = {
+  bullets: string[];
+  expansions: GlobalSummaryExpansions;
+};
+
 type AnalyzeResponse = {
   language: string;
-  paragraphs: Paragraph[];
-  global_summary: string;
-  paragraph_summaries: SummaryItem[];
-  paragraph_keywords: KeywordItem[];
-  wordcloud_image_url: string | null;
+  total_pages: number;
+  page_summaries: PageSummary[];
+  global_summary: GlobalSummary;
+  system_prompt?: string | null;
 };
 
 type MindmapResponse = {
@@ -50,7 +63,7 @@ type MindmapResponse = {
 
 type FilePreviewKind = "none" | "pdf" | "text" | "image" | "generic";
 
-type FeatureKey = "summary" | "keywords" | "mindmap";
+type FeatureKey = "summary" | "pages" | "mindmap";
 
 const rawBackendOrigin =
   process.env.NEXT_PUBLIC_BACKEND_URL ??
@@ -130,6 +143,9 @@ export default function Home() {
   const [hasLoadedSettings, setHasLoadedSettings] = useState(false);
   const [analysisCompleteMessage, setAnalysisCompleteMessage] =
     useState<string | null>(null);
+  const [analysisProgress, setAnalysisProgress] = useState<
+    { value: number; message: string } | null
+  >(null);
   const fileInputId = useId();
   const uploadHelpId = `${fileInputId}-help`;
 
@@ -228,14 +244,24 @@ export default function Home() {
   }, [selectedFiles]);
 
   const handleFilesSelected = useCallback((files: FileList | File[]) => {
-    const fileArray = Array.from(files).slice(0, 5);
+    const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
-    setSelectedFiles(fileArray);
-    setError(null);
+
+    if (fileArray.length > 1) {
+      setError("一次僅能上傳 1 個檔案，已保留第一個檔案。");
+    } else {
+      setError(null);
+    }
+
+    const firstFile = fileArray[0];
+    if (!firstFile) return;
+
+    setSelectedFiles([firstFile]);
     setMindmapError(null);
     setAnalysisResult(null);
     setMindmapResult(null);
     setAnalysisCompleteMessage(null);
+    setAnalysisProgress(null);
   }, []);
 
   const handleDrop = useCallback(
@@ -276,6 +302,7 @@ export default function Home() {
     setError(null);
     setMindmapError(null);
     setActiveFeature("summary");
+    setAnalysisProgress({ value: 5, message: "準備分析…" });
 
     try {
       const formData = new FormData();
@@ -291,19 +318,97 @@ export default function Home() {
         body: formData,
       });
 
-      if (!response.ok) {
+      if (!response.ok || !response.body) {
         const text = await response.text();
         throw new Error(text || "分析失敗，請稍後再試");
       }
 
-      const data = (await response.json()) as AnalyzeResponse;
-      const normalized: AnalyzeResponse = {
-        ...data,
-        wordcloud_image_url: toAbsoluteUrl(data.wordcloud_image_url),
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalData: AnalyzeResponse | null = null;
+      let serverError: string | null = null;
+      let shouldStop = false;
+
+      const handleLine = (line: string) => {
+        if (!line) return;
+        try {
+          const event = JSON.parse(line) as {
+            type?: string;
+            progress?: number;
+            message?: string;
+            data?: AnalyzeResponse;
+          };
+
+          if (event.type === "progress") {
+            setAnalysisProgress({
+              value:
+                typeof event.progress === "number"
+                  ? Math.min(Math.max(event.progress, 0), 100)
+                  : 0,
+              message: event.message ?? "",
+            });
+          } else if (event.type === "result" && event.data) {
+            finalData = event.data;
+            setAnalysisProgress({
+              value:
+                typeof event.progress === "number"
+                  ? Math.min(Math.max(event.progress, 0), 100)
+                  : 100,
+              message: event.message ?? "分析完成",
+            });
+            shouldStop = true;
+          } else if (event.type === "error") {
+            serverError = event.message || "分析失敗";
+            setAnalysisProgress({ value: 100, message: serverError });
+            shouldStop = true;
+          }
+        } catch (err) {
+          console.error("無法解析伺服器訊息", err, line);
+        }
       };
-      setAnalysisResult(normalized);
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (value) {
+          buffer += decoder.decode(value, { stream: !done });
+          let newlineIndex = buffer.indexOf("\n");
+          while (newlineIndex >= 0) {
+            const line = buffer.slice(0, newlineIndex).trim();
+            buffer = buffer.slice(newlineIndex + 1);
+            handleLine(line);
+            newlineIndex = buffer.indexOf("\n");
+          }
+        }
+
+        if (done) {
+          const remaining = buffer.trim();
+          if (remaining) {
+            handleLine(remaining);
+          }
+          break;
+        }
+
+        if (shouldStop) {
+          // 嘗試讀完剩餘資料；若伺服器仍有內容會在下一輪完成。
+          if (!buffer.length) {
+            break;
+          }
+        }
+      }
+
+      if (serverError) {
+        throw new Error(serverError);
+      }
+
+      if (!finalData) {
+        throw new Error("未取得分析結果，請稍後再試");
+      }
+
+      setAnalysisResult(finalData);
       setMindmapResult(null);
       setAnalysisCompleteMessage("分析結果已完成");
+      window.setTimeout(() => setAnalysisProgress(null), 1200);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "分析時發生未知錯誤";
@@ -311,6 +416,7 @@ export default function Home() {
       setAnalysisResult(null);
       setMindmapResult(null);
       setAnalysisCompleteMessage(null);
+      setAnalysisProgress(null);
     } finally {
       setIsAnalyzing(false);
     }
@@ -383,13 +489,14 @@ export default function Home() {
     setMindmapError(null);
     setActiveFeature("summary");
     setAnalysisCompleteMessage(null);
+    setAnalysisProgress(null);
   }, []);
 
   const renderSummary = () => {
     if (!analysisResult) {
       return (
         <p className="text-slate-500">
-          上傳並分析檔案後，將在此處展示全局摘要與段落摘要結果。
+          上傳並分析檔案後，將在此處展示全局摘要與逐頁重點。
         </p>
       );
     }
@@ -401,108 +508,101 @@ export default function Home() {
     return (
       <div className="space-y-8">
         <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
-          <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">
-            語言：{languageLabel}
+          {languageLabel ? (
+            <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">
+              語言：{languageLabel}
+            </span>
+          ) : null}
+          <span className="rounded-full bg-emerald-50 px-3 py-1 font-medium text-emerald-600">
+            共 {analysisResult.total_pages} 頁
           </span>
         </div>
         <div>
-          <h3 className="text-lg font-semibold text-slate-800">全局摘要</h3>
-          <p className="mt-3 whitespace-pre-line leading-7 text-slate-700">
-            {analysisResult.global_summary || "尚未取得摘要"}
-          </p>
-        </div>
-        <div>
-          <h3 className="text-lg font-semibold text-slate-800">段落摘要</h3>
-          <div className="mt-4 max-h-[320px] space-y-4 overflow-y-auto pr-2">
-            {analysisResult.paragraph_summaries.map((item) => {
-              const paragraph = analysisResult.paragraphs.find(
-                (p) => p.index === item.paragraph_index,
-              );
-              return (
-                <div
-                  key={item.paragraph_index}
-                  className="rounded-xl border border-slate-200 bg-white/80 p-4 shadow-sm"
+          <h3 className="text-lg font-semibold text-slate-800">全局總結</h3>
+          {analysisResult.global_summary.bullets.length ? (
+            <ul className="mt-4 space-y-3 text-[15px] leading-7 text-slate-800">
+              {analysisResult.global_summary.bullets.map((item, index) => (
+                <li
+                  key={`${item}-${index}`}
+                  className="flex items-start gap-2 rounded-xl bg-slate-50/80 px-4 py-3"
                 >
-                  <p className="text-sm font-semibold text-slate-600">
-                    第 {item.paragraph_index + 1} 段
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-slate-500">
-                    {paragraph?.text.slice(0, 160) || ""}
-                    {paragraph && paragraph.text.length > 160 ? "…" : ""}
-                  </p>
-                  <p className="mt-3 text-[15px] leading-6 text-slate-800">
-                    {item.summary}
-                  </p>
-                </div>
-              );
-            })}
-            {analysisResult.paragraph_summaries.length === 0 && (
-              <p className="text-slate-500">尚未取得段落摘要。</p>
-            )}
-          </div>
+                  <span className="mt-1 inline-flex h-2.5 w-2.5 flex-none rounded-full bg-indigo-500" />
+                  <span className="flex-1">{item}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-slate-500">尚未取得全局摘要。</p>
+          )}
+        </div>
+        <div className="grid gap-6 lg:grid-cols-3">
+          <article className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm">
+            <h4 className="text-sm font-semibold text-slate-600">關鍵結論</h4>
+            <p className="mt-3 text-sm leading-6 text-slate-700">
+              {analysisResult.global_summary.expansions.key_conclusions || "暫無資料"}
+            </p>
+          </article>
+          <article className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm">
+            <h4 className="text-sm font-semibold text-slate-600">核心數據與依據</h4>
+            <p className="mt-3 text-sm leading-6 text-slate-700">
+              {analysisResult.global_summary.expansions.core_data || "暫無資料"}
+            </p>
+          </article>
+          <article className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm">
+            <h4 className="text-sm font-semibold text-slate-600">風險與建議</h4>
+            <p className="mt-3 text-sm leading-6 text-slate-700">
+              {analysisResult.global_summary.expansions.risks_and_actions || "暫無資料"}
+            </p>
+          </article>
         </div>
       </div>
     );
   };
 
-  const renderKeywords = () => {
+  const renderPageSummaries = () => {
     if (!analysisResult) {
       return (
         <p className="text-slate-500">
-          先分析檔案後，即可在此查看每段的關鍵字摘要。
+          先分析檔案後，即可在此查看每頁 3–5 條要點與跳過說明。
         </p>
       );
     }
 
+    const classificationMap: Record<string, string> = {
+      normal: "一般內容",
+      toc: "目錄頁",
+      pure_image: "純圖片",
+      blank: "空白/水印",
+      cover: "封面",
+    };
+
     return (
-      <div className="space-y-6">
-        <div className="max-h-[320px] space-y-6 overflow-y-auto pr-2">
-          {analysisResult.paragraph_keywords.map((item) => (
-            <div
-              key={item.paragraph_index}
-              className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm"
-            >
-              <p className="text-sm font-semibold text-slate-600">
-                第 {item.paragraph_index + 1} 段
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {item.keywords.length ? (
-                  item.keywords.map((kw) => (
-                    <span
-                      key={kw}
-                      className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-600"
-                    >
-                      {kw}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-slate-400">無關鍵字資料</span>
-                )}
-              </div>
+      <div className="space-y-5 max-h-[460px] overflow-y-auto pr-2">
+        {analysisResult.page_summaries.map((page) => (
+          <article
+            key={page.page_number}
+            className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-semibold text-slate-700">
+                第 {page.page_number} 頁
+              </span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+                {classificationMap[page.classification] ?? page.classification}
+              </span>
             </div>
-          ))}
-          {analysisResult.paragraph_keywords.length === 0 && (
-            <p className="text-slate-500">尚未取得關鍵字資料。</p>
-          )}
-        </div>
-        {analysisResult.wordcloud_image_url ? (
-          <div>
-            <h3 className="text-lg font-semibold text-slate-800">文字雲</h3>
-            <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              <div className="relative aspect-[4/3] w-full">
-                <Image
-                  src={analysisResult.wordcloud_image_url}
-                  alt="關鍵字文字雲"
-                  fill
-                  className="object-contain"
-                  unoptimized
-                />
-              </div>
-            </div>
-          </div>
-        ) : (
-          <p className="text-slate-500">尚未取得文字雲圖片。</p>
-        )}
+            <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
+              {page.bullets.map((bullet, idx) => (
+                <li key={`${page.page_number}-${idx}`} className="rounded-xl bg-slate-50/80 px-3 py-2">
+                  {bullet}
+                </li>
+              ))}
+            </ul>
+            {page.skipped && page.skip_reason ? (
+              <p className="mt-2 text-xs text-slate-500">原因：{page.skip_reason}</p>
+            ) : null}
+          </article>
+        ))}
       </div>
     );
   };
@@ -639,23 +739,35 @@ export default function Home() {
     if (!analysisResult) {
       return (
         <div className="flex min-h-[240px] items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-white/80 p-8 text-sm text-slate-500">
-          完成檔案分析後，整理好的摘要、關鍵字與心智圖將顯示於此處。
+          完成檔案分析後，全局摘要、逐頁重點與心智圖將顯示於此處。
         </div>
       );
     }
 
     const features = [
-      { key: "summary" as FeatureKey, label: "摘要整理", description: "包含全局摘要與各段重點內容" },
-      { key: "keywords" as FeatureKey, label: "關鍵字整理", description: "每段的核心關鍵字與文字雲圖像" },
-      { key: "mindmap" as FeatureKey, label: "心智圖生成", description: "視覺化呈現段落主題與概念連結" },
+      {
+        key: "summary" as FeatureKey,
+        label: "全局摘要",
+        description: "5–7 條總結與三段擴充說明",
+      },
+      {
+        key: "pages" as FeatureKey,
+        label: "逐頁重點",
+        description: "每頁 3–5 條要點與跳過理由",
+      },
+      {
+        key: "mindmap" as FeatureKey,
+        label: "心智圖生成",
+        description: "視覺化呈現段落主題與概念連結",
+      },
     ];
 
     const renderActiveContent = () => {
       switch (activeFeature) {
         case "summary":
           return renderSummary();
-        case "keywords":
-          return renderKeywords();
+        case "pages":
+          return renderPageSummaries();
         case "mindmap":
           return (
             <div className="space-y-6">
@@ -790,7 +902,6 @@ export default function Home() {
                   id={fileInputId}
                   ref={fileInputRef}
                   type="file"
-                  multiple
                   accept=".pdf,.ppt,.pptx,.doc,.docx,.md,.txt"
                   className="sr-only"
                   aria-describedby={uploadHelpId}
@@ -806,7 +917,7 @@ export default function Home() {
                 <div className="flex max-w-xl flex-col gap-3">
                   <h1 className="text-3xl font-semibold text-slate-900">上傳您的檔案</h1>
                   <p className="text-base leading-7 text-slate-600">
-                    將檔案拖放到此處，或點擊任何地方瀏覽檔案。上傳後系統將自動為您整理重點、擷取關鍵字並生成心智圖。
+                    將檔案拖放到此處，或點擊任何地方瀏覽檔案。上傳後系統會整理每頁重點並彙整全局摘要。
                   </p>
                 </div>
                 <button
@@ -819,7 +930,7 @@ export default function Home() {
                 <p id={uploadHelpId} className="text-xs leading-6 text-slate-500">
                   支援格式：PDF · PPT · PPTX · Word · Markdown · TXT
                   <br />
-                  最大檔案大小：50MB，一次最多 1 個檔案
+                  最大檔案大小：50MB，一次僅能上傳 1 份檔案
                 </p>
                 <div className="flex flex-wrap justify-center gap-3 text-sm font-medium">
                   {fileTypes.map((type) => (
@@ -837,11 +948,10 @@ export default function Home() {
                 <div className="w-full rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-left text-sm text-slate-600">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium text-slate-800">
-                        已選擇 {selectedFiles.length} 個檔案
-                      </p>
+                      <p className="font-medium text-slate-800">已選擇檔案</p>
+                      <p className="mt-1 text-sm text-slate-600">{selectedFileName}</p>
                       <p className="mt-1 text-xs text-slate-500">
-                        目前僅會分析第一個檔案：{selectedFileName}
+                        檔案大小：{formatBytes(selectedFiles[0].size)}
                       </p>
                     </div>
                     <button
@@ -849,30 +959,30 @@ export default function Home() {
                       onClick={resetSelection}
                       className="text-xs font-medium text-rose-500 hover:text-rose-600"
                     >
-                      清除
+                      重新選擇
                     </button>
                   </div>
-                  <ul className="mt-3 max-h-[160px] space-y-2 overflow-y-auto">
-                    {selectedFiles.map((file) => (
-                      <li
-                        key={file.name}
-                        className="flex items-center justify-between rounded-xl bg-white px-3 py-2 shadow-sm"
-                      >
-                        <span className="truncate pr-3 text-slate-700">
-                          {file.name}
-                        </span>
-                        <span className="text-xs text-slate-400">
-                          {formatBytes(file.size)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
                 </div>
               ) : null}
 
               {error ? (
                 <div className="w-full rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
                   {error}
+                </div>
+              ) : null}
+
+              {analysisProgress ? (
+                <div className="w-full space-y-2 text-left">
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <span>{analysisProgress.message || "分析中"}</span>
+                    <span>{analysisProgress.value}%</span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-slate-200">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-blue-500 transition-all"
+                      style={{ width: `${Math.min(Math.max(analysisProgress.value, 0), 100)}%` }}
+                    />
+                  </div>
                 </div>
               ) : null}
 
@@ -907,7 +1017,7 @@ export default function Home() {
               <div>
                 <h2 className="text-3xl font-semibold text-slate-900">分析結果整理</h2>
                 <p className="mt-3 text-base text-slate-600">
-                  檔案分析完成後，摘要、關鍵字與心智圖會集中顯示在此區域。
+                  檔案分析完成後，全局摘要、逐頁重點與心智圖會集中顯示在此區域。
                 </p>
               </div>
             </div>
