@@ -432,13 +432,15 @@ export default function Home() {
         throw new Error("未取得分析結果，請稍後再試");
       }
 
+      const resolvedData: AnalyzeResponse = finalData;
+
       setAnalysisResult({
-        language: finalData.language,
-        total_pages: finalData.total_pages,
-        page_summaries: finalData.page_summaries,
-        global_summary: finalData.global_summary,
-        system_prompt: finalData.system_prompt,
-        wordcloud_image_url: toAbsoluteUrl(finalData.wordcloud_image_url),
+        language: resolvedData.language,
+        total_pages: resolvedData.total_pages,
+        page_summaries: resolvedData.page_summaries,
+        global_summary: resolvedData.global_summary,
+        system_prompt: resolvedData.system_prompt,
+        wordcloud_image_url: toAbsoluteUrl(resolvedData.wordcloud_image_url),
       });
       setMindmapResult(null);
       setAnalysisCompleteMessage("分析結果已完成");
