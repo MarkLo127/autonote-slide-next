@@ -328,7 +328,6 @@ export default function Home() {
     setAnalysisCompleteMessage(null);
     setError(null);
     setMindmapError(null);
-    setActiveFeature("summary");
     setAnalysisProgress({ value: 5, message: "準備分析…" });
 
     try {
