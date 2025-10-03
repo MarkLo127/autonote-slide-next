@@ -1,12 +1,13 @@
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class PageSummary(BaseModel):
     page_number: int
     classification: str
     bullets: List[str]
+    keywords: List[str] = Field(default_factory=list)
     skipped: bool
     skip_reason: Optional[str] = None
 
@@ -46,3 +47,4 @@ class AnalyzeResponse(BaseModel):
     page_summaries: List[PageSummary]
     global_summary: GlobalSummary
     system_prompt: Optional[str] = None
+    wordcloud_image_url: Optional[str] = None

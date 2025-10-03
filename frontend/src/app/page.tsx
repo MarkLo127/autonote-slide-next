@@ -26,6 +26,7 @@ type PageSummary = {
   page_number: number;
   classification: string;
   bullets: string[];
+  keywords: string[];
   skipped: boolean;
   skip_reason?: string | null;
 };
@@ -47,6 +48,7 @@ type AnalyzeResponse = {
   page_summaries: PageSummary[];
   global_summary: GlobalSummary;
   system_prompt?: string | null;
+  wordcloud_image_url: string | null;
 };
 
 type MindmapResponse = {
@@ -62,8 +64,6 @@ type MindmapResponse = {
 };
 
 type FilePreviewKind = "none" | "pdf" | "text" | "image" | "generic";
-
-type FeatureKey = "summary" | "pages" | "mindmap";
 
 const rawBackendOrigin =
   process.env.NEXT_PUBLIC_BACKEND_URL ??
@@ -147,7 +147,6 @@ export default function Home() {
   const [filePreviewType, setFilePreviewType] =
     useState<FilePreviewKind>("none");
   const [filePreviewContent, setFilePreviewContent] = useState("");
-  const [activeFeature, setActiveFeature] = useState<FeatureKey>("summary");
   const [error, setError] = useState<string | null>(null);
   const [mindmapError, setMindmapError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -434,7 +433,12 @@ export default function Home() {
         throw new Error("未取得分析結果，請稍後再試");
       }
 
-      setAnalysisResult(finalData);
+      const normalizedResult: AnalyzeResponse = {
+        ...finalData,
+        wordcloud_image_url: toAbsoluteUrl(finalData.wordcloud_image_url),
+      };
+
+      setAnalysisResult(normalizedResult);
       setMindmapResult(null);
       setAnalysisCompleteMessage("分析結果已完成");
       window.setTimeout(() => setAnalysisProgress(null), 1200);
@@ -449,7 +453,7 @@ export default function Home() {
     } finally {
       setIsAnalyzing(false);
     }
-  }, [selectedFiles, apiKey, llmBaseUrl, backendBase]);
+  }, [selectedFiles, apiKey, llmBaseUrl, backendBase, toAbsoluteUrl]);
 
   const ensureMindmap = useCallback(async () => {
     if (!selectedFiles.length) {
@@ -501,141 +505,15 @@ export default function Home() {
     }
   }, [selectedFiles, mindmapResult, isMindmapLoading, apiKey, llmBaseUrl, backendBase, toAbsoluteUrl]);
 
-  const handleFeatureSelect = useCallback(
-    async (feature: FeatureKey) => {
-      setActiveFeature(feature);
-      if (feature === "mindmap") {
-        await ensureMindmap();
-      }
-    },
-    [ensureMindmap],
-  );
-
   const resetSelection = useCallback(() => {
     setSelectedFiles([]);
     setAnalysisResult(null);
     setMindmapResult(null);
     setError(null);
     setMindmapError(null);
-    setActiveFeature("summary");
     setAnalysisCompleteMessage(null);
     setAnalysisProgress(null);
   }, []);
-
-  const renderSummary = () => {
-    if (!analysisResult) {
-      return (
-        <p className="text-slate-500">
-          上傳並分析檔案後，將在此處展示全局摘要與逐頁重點。
-        </p>
-      );
-    }
-
-    const languageLabel = analysisResult.language
-      ? analysisResult.language.toUpperCase()
-      : "";
-
-    return (
-      <div className="space-y-8">
-        <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
-          {languageLabel ? (
-            <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">
-              語言：{languageLabel}
-            </span>
-          ) : null}
-          <span className="rounded-full bg-emerald-50 px-3 py-1 font-medium text-emerald-600">
-            共 {analysisResult.total_pages} 頁
-          </span>
-        </div>
-        <div>
-          <h3 className="text-lg font-semibold text-slate-800">全局總結</h3>
-          {analysisResult.global_summary.bullets.length ? (
-            <ul className="mt-4 space-y-3 text-[15px] leading-7 text-slate-800">
-              {analysisResult.global_summary.bullets.map((item, index) => (
-                <li
-                  key={`${item}-${index}`}
-                  className="flex items-start gap-2 rounded-xl bg-slate-50/80 px-4 py-3"
-                >
-                  <span className="mt-1 inline-flex h-2.5 w-2.5 flex-none rounded-full bg-indigo-500" />
-                  <span className="flex-1">{item}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-3 text-slate-500">尚未取得全局摘要。</p>
-          )}
-        </div>
-        <div className="grid gap-6 lg:grid-cols-3">
-          <article className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm">
-            <h4 className="text-sm font-semibold text-slate-600">關鍵結論</h4>
-            <p className="mt-3 text-sm leading-6 text-slate-700">
-              {analysisResult.global_summary.expansions.key_conclusions || "暫無資料"}
-            </p>
-          </article>
-          <article className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm">
-            <h4 className="text-sm font-semibold text-slate-600">核心數據與依據</h4>
-            <p className="mt-3 text-sm leading-6 text-slate-700">
-              {analysisResult.global_summary.expansions.core_data || "暫無資料"}
-            </p>
-          </article>
-          <article className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm">
-            <h4 className="text-sm font-semibold text-slate-600">風險與建議</h4>
-            <p className="mt-3 text-sm leading-6 text-slate-700">
-              {analysisResult.global_summary.expansions.risks_and_actions || "暫無資料"}
-            </p>
-          </article>
-        </div>
-      </div>
-    );
-  };
-
-  const renderPageSummaries = () => {
-    if (!analysisResult) {
-      return (
-        <p className="text-slate-500">
-          先分析檔案後，即可在此查看每頁 3–5 條要點與跳過說明。
-        </p>
-      );
-    }
-
-    const classificationMap: Record<string, string> = {
-      normal: "一般內容",
-      toc: "目錄頁",
-      pure_image: "純圖片",
-      blank: "空白/水印",
-      cover: "封面",
-    };
-
-    return (
-      <div className="space-y-5 max-h-[460px] overflow-y-auto pr-2">
-        {analysisResult.page_summaries.map((page) => (
-          <article
-            key={page.page_number}
-            className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm"
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-semibold text-slate-700">
-                第 {page.page_number} 頁
-              </span>
-              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
-                {classificationMap[page.classification] ?? page.classification}
-              </span>
-            </div>
-            <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
-              {page.bullets.map((bullet, idx) => (
-                <li key={`${page.page_number}-${idx}`} className="rounded-xl bg-slate-50/80 px-3 py-2">
-                  {bullet}
-                </li>
-              ))}
-            </ul>
-            {page.skipped && page.skip_reason ? (
-              <p className="mt-2 text-xs text-slate-500">原因：{page.skip_reason}</p>
-            ) : null}
-          </article>
-        ))}
-      </div>
-    );
-  };
 
   const renderMindmap = () => {
     if (mindmapError) {
@@ -765,6 +643,36 @@ export default function Home() {
     );
   };
 
+  const renderMindmapSection = () => {
+    if (!analysisResult) return null;
+
+    return (
+      <section className="space-y-6 rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-inner">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-xl font-semibold text-slate-900">心智圖生成（選用）</h3>
+            <p className="text-sm text-slate-500">
+              產生視覺化架構以輔助簡報或教學，可重覆點選更新內容。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void ensureMindmap()}
+            disabled={isMindmapLoading || !selectedFiles.length}
+            className={`inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-medium transition ${
+              isMindmapLoading || !selectedFiles.length
+                ? "cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400"
+                : "border border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:text-indigo-600"
+            }`}
+          >
+            {isMindmapLoading ? "心智圖生成中…" : "生成心智圖"}
+          </button>
+        </div>
+        {renderMindmap()}
+      </section>
+    );
+  };
+
   const renderAnalysisPanel = () => {
     if (!analysisResult) {
       return (
@@ -774,92 +682,162 @@ export default function Home() {
       );
     }
 
-    const features = [
-      {
-        key: "summary" as FeatureKey,
-        label: "全局摘要",
-        description: "5–7 條總結與三段擴充說明",
-      },
-      {
-        key: "pages" as FeatureKey,
-        label: "逐頁重點",
-        description: "每頁 3–5 條要點與跳過理由",
-      },
-      {
-        key: "mindmap" as FeatureKey,
-        label: "心智圖生成",
-        description: "視覺化呈現段落主題與概念連結",
-      },
-    ];
+    const languageLabel = analysisResult.language
+      ? analysisResult.language.toUpperCase()
+      : "";
 
-    const renderActiveContent = () => {
-      switch (activeFeature) {
-        case "summary":
-          return renderSummary();
-        case "pages":
-          return renderPageSummaries();
-        case "mindmap":
-          return (
-            <div className="space-y-6">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex-1">
-                  <p className="text-sm text-slate-500">視覺化呈現段落主題與概念連結。</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void ensureMindmap()}
-                  disabled={isMindmapLoading || !selectedFiles.length}
-                  className={`inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-medium transition ${
-                    isMindmapLoading || !selectedFiles.length
-                      ? "cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400"
-                      : "border border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:text-indigo-600"
-                  }`}
-                >
-                  {isMindmapLoading ? "心智圖生成中…" : "生成心智圖"}
-                </button>
-              </div>
-              {renderMindmap()}
-            </div>
-          );
-        default:
-          return renderSummary();
-      }
+    const classificationMap: Record<string, string> = {
+      normal: "一般內容",
+      toc: "目錄頁",
+      pure_image: "純圖片",
+      blank: "空白/水印",
+      cover: "封面",
     };
 
-    return (
-      <div className="space-y-6">
-        {/* Feature Navigation Buttons */}
-        <div className="flex flex-wrap gap-3 justify-center">
-          {features.map((feature) => (
-            <button
-              key={feature.key}
-              type="button"
-              onClick={() => handleFeatureSelect(feature.key)}
-              className={`inline-flex items-center justify-center rounded-full px-6 py-3 text-sm font-medium transition ${
-                activeFeature === feature.key
-                  ? "bg-gradient-to-r from-indigo-500 to-blue-500 text-white shadow-lg"
-                  : "border border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:text-indigo-600"
-              }`}
-            >
-              {feature.label}
-            </button>
-          ))}
-        </div>
+    const aggregatedKeywords = Array.from(
+      new Set(
+        analysisResult.page_summaries
+          .map((page) => page.keywords.slice(0, 4))
+          .flat()
+          .filter((kw) => kw.trim().length > 0),
+      ),
+    ).slice(0, 24);
 
-        {/* Active Feature Content */}
-        <section className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-inner min-h-[400px]">
-          <div className="flex flex-col gap-2 mb-6">
-            <h3 className="text-xl font-semibold text-slate-900">
-              {features.find(f => f.key === activeFeature)?.label}
-            </h3>
-            <p className="text-sm text-slate-500">
-              {features.find(f => f.key === activeFeature)?.description}
-            </p>
+    return (
+      <div className="space-y-8">
+        <section className="space-y-6 rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-inner">
+          <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
+            {languageLabel ? (
+              <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">
+                語言：{languageLabel}
+              </span>
+            ) : null}
+            <span className="rounded-full bg-emerald-50 px-3 py-1 font-medium text-emerald-600">
+              共 {analysisResult.total_pages} 頁
+            </span>
           </div>
           <div className="space-y-6">
-            {renderActiveContent()}
+            <div>
+              <h3 className="text-lg font-semibold text-slate-800">全局總結</h3>
+              {analysisResult.global_summary.bullets.length ? (
+                <ul className="mt-4 space-y-3 text-[15px] leading-7 text-slate-800">
+                  {analysisResult.global_summary.bullets.map((item, index) => (
+                    <li
+                      key={`${item}-${index}`}
+                      className="rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3"
+                    >
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-3 text-slate-500">尚未取得全局摘要。</p>
+              )}
+            </div>
+            <div className="grid gap-6 lg:grid-cols-3">
+              <article className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm">
+                <h4 className="text-sm font-semibold text-slate-600">關鍵結論</h4>
+                <p className="mt-3 text-sm leading-7 text-slate-700">
+                  {analysisResult.global_summary.expansions.key_conclusions || "暫無資料"}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm">
+                <h4 className="text-sm font-semibold text-slate-600">核心數據與依據</h4>
+                <p className="mt-3 text-sm leading-7 text-slate-700">
+                  {analysisResult.global_summary.expansions.core_data || "暫無資料"}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm">
+                <h4 className="text-sm font-semibold text-slate-600">風險與建議</h4>
+                <p className="mt-3 text-sm leading-7 text-slate-700">
+                  {analysisResult.global_summary.expansions.risks_and_actions || "暫無資料"}
+                </p>
+              </article>
+            </div>
+          </div>
+          <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+            <div className="rounded-2xl border border-slate-200 bg-white/90 p-5">
+              <h4 className="text-sm font-semibold text-slate-600">整體關鍵字</h4>
+              {aggregatedKeywords.length ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {aggregatedKeywords.map((kw) => (
+                    <span
+                      key={kw}
+                      className="rounded-full bg-indigo-50 px-3 py-1 text-sm font-medium text-indigo-600"
+                    >
+                      {kw}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-slate-500">暫無關鍵字可顯示。</p>
+              )}
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white/90 p-5">
+              <h4 className="text-sm font-semibold text-slate-600">文字雲</h4>
+              {analysisResult.wordcloud_image_url ? (
+                <div className="relative mt-3 aspect-[4/3] w-full overflow-hidden rounded-xl border border-slate-200">
+                  <Image
+                    src={analysisResult.wordcloud_image_url}
+                    alt="關鍵字文字雲"
+                    fill
+                    className="object-contain"
+                    unoptimized
+                  />
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-slate-500">尚未取得文字雲。</p>
+              )}
+            </div>
           </div>
         </section>
+
+        <section className="space-y-5 rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-inner">
+          <h3 className="text-lg font-semibold text-slate-800">逐頁重點與關鍵字</h3>
+          <div className="space-y-5 max-h-[520px] overflow-y-auto pr-2">
+            {analysisResult.page_summaries.map((page) => (
+              <article
+                key={page.page_number}
+                className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold text-slate-700">
+                    第 {page.page_number} 頁
+                  </span>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+                    {classificationMap[page.classification] ?? page.classification}
+                  </span>
+                </div>
+                <ul className="mt-3 space-y-2 text-sm leading-7 text-slate-700">
+                  {page.bullets.map((bullet, idx) => (
+                    <li key={`${page.page_number}-${idx}`} className="rounded-xl bg-slate-50/80 px-3 py-2">
+                      {bullet}
+                    </li>
+                  ))}
+                </ul>
+                {page.keywords.length ? (
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                    {page.keywords.map((kw) => (
+                      <span
+                        key={`${page.page_number}-${kw}`}
+                        className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-600"
+                      >
+                        {kw}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-3 text-xs text-slate-400">本頁尚無關鍵字。</p>
+                )}
+                {page.skipped && page.skip_reason ? (
+                  <p className="mt-3 text-xs text-slate-500">原因：{page.skip_reason}</p>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        </section>
+
+        {renderMindmapSection()}
       </div>
     );
   };

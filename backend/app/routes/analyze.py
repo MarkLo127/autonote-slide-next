@@ -6,12 +6,14 @@ from typing import Optional
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
-from backend.app.models.schemas import AnalyzeResponse, LLMSettings, PageSummary
+from backend.app.models.schemas import AnalyzeResponse, LLMSettings, PageSummary, Paragraph
 from backend.app.services.analyze.page_classifier import classify_page
 from backend.app.services.analyze.page_parser import parse_pages
 from backend.app.services.analyze.summary_engine import SummaryEngine, SYSTEM_PROMPT
 from backend.app.services.nlp.language_detect import detect_lang
-from backend.app.services.storage import save_upload
+from backend.app.services.nlp.keyword_extractor import extract_keywords_by_paragraph
+from backend.app.services.storage import make_public_url, save_upload
+from backend.app.services.wordcloud.wordcloud_gen import build_wordcloud
 
 router = APIRouter(prefix="/analyze", tags=["analyze"])
 
@@ -95,6 +97,28 @@ async def analyze_file(
                 joined_text = "\n".join(page.text for page in pages)
                 language = detect_lang(joined_text)
 
+                paragraph_objs = [
+                    Paragraph(index=idx, text=page.text or "", start_char=0, end_char=len(page.text or ""))
+                    for idx, page in enumerate(pages)
+                ]
+                paragraph_keywords = extract_keywords_by_paragraph(paragraph_objs, language)
+                keyword_lookup = {item["paragraph_index"]: item["keywords"] for item in paragraph_keywords}
+
+                wordcloud_url = None
+                try:
+                    all_keywords = [kw for item in paragraph_keywords for kw in item["keywords"]]
+                    if all_keywords:
+                        wc_path = build_wordcloud(paragraph_keywords, language)
+                        wordcloud_url = make_public_url(wc_path)
+                except Exception as exc:  # pylint: disable=broad-except
+                    await push_event(
+                        {
+                            "type": "progress",
+                            "progress": 95,
+                            "message": f"文字雲生成失敗：{exc}",
+                        }
+                    )
+
                 response_payload = AnalyzeResponse(
                     language=language,
                     total_pages=total_pages,
@@ -103,6 +127,7 @@ async def analyze_file(
                             page_number=result.page_number,
                             classification=result.classification,
                             bullets=result.bullets,
+                            keywords=keyword_lookup.get(result.page_number - 1, []),
                             skipped=result.skipped,
                             skip_reason=result.skip_reason,
                         )
@@ -110,6 +135,7 @@ async def analyze_file(
                     ],
                     global_summary=global_summary,
                     system_prompt=SYSTEM_PROMPT,
+                    wordcloud_image_url=wordcloud_url,
                 )
 
                 await push_event(

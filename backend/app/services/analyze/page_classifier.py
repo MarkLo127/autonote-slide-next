@@ -63,15 +63,35 @@ def classify_page(page_number: int, text: str) -> ClassifiedPage:
     stripped = text.strip()
 
     if _is_probably_toc(stripped):
-        return ClassifiedPage(page_number, stripped, "toc", "〈本頁跳過（目錄）〉")
+        return ClassifiedPage(
+            page_number,
+            stripped,
+            "toc",
+            "〈本頁跳過（目錄）〉本頁僅列出章節與頁碼參考，無實質內容可供摘要。",
+        )
 
     if _is_probably_cover(stripped, page_number):
-        return ClassifiedPage(page_number, stripped, "cover", "〈本頁跳過（封面）〉")
+        return ClassifiedPage(
+            page_number,
+            stripped,
+            "cover",
+            "〈本頁跳過（封面）〉僅顯示封面資訊或水印，無需抽取重點。",
+        )
 
     if _is_probably_blank(stripped):
-        return ClassifiedPage(page_number, stripped, "blank", "〈本頁跳過（空白/水印）〉")
+        return ClassifiedPage(
+            page_number,
+            stripped,
+            "blank",
+            "〈本頁跳過（空白/水印）〉無可辨識文字或數據，略過本頁摘要。",
+        )
 
     if _is_probably_pure_image(stripped):
-        return ClassifiedPage(page_number, stripped, "pure_image", "〈本頁跳過（純圖片）〉")
+        return ClassifiedPage(
+            page_number,
+            stripped,
+            "pure_image",
+            "〈本頁跳過（純圖片）〉僅含圖片且無可辨識數據，暫不生成文字重點。",
+        )
 
     return ClassifiedPage(page_number, stripped, "normal", None)
