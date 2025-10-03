@@ -69,20 +69,32 @@ const rawBackendOrigin =
   process.env.NEXT_PUBLIC_BACKEND_URL ??
   process.env.NEXT_PUBLIC_API_BASE_URL ??
   "http://localhost:8000";
-const BACKEND_BASE = rawBackendOrigin.replace(/\/$/, "");
-const ANALYZE_ENDPOINT = `${BACKEND_BASE}/analyze`;
-const MINDMAP_ENDPOINT = `${BACKEND_BASE}/mindmap`;
+const sanitizeBase = (base: string) => base.replace(/\/$/, "");
+
+const resolveBrowserBackendBase = (base: string) => {
+  if (typeof window === "undefined") return base;
+  try {
+    const url = new URL(base);
+    if (url.hostname === "backend") {
+      const port = url.port || "8000";
+      return `${window.location.protocol}//${window.location.hostname}${port ? `:${port}` : ""}`;
+    }
+    if (url.hostname === "0.0.0.0") {
+      const port = url.port || "8000";
+      return `${window.location.protocol}//${window.location.hostname}${port ? `:${port}` : ""}`;
+    }
+  } catch (err) {
+    console.warn("解析後端位址失敗，將使用預設值", err);
+    return base;
+  }
+  return base;
+};
+
+const INITIAL_BACKEND_BASE = sanitizeBase(rawBackendOrigin);
 const DEFAULT_LLM_BASE_URL = "https://api.openai.com/v1";
 
 const normalizeOptionalUrl = (url: string) =>
   url ? url.trim().replace(/\/$/, "") : "";
-
-const toAbsoluteUrl = (url: string | null | undefined): string | null => {
-  if (!url) return null;
-  if (/^https?:\/\//i.test(url)) return url;
-  if (url.startsWith("/")) return `${BACKEND_BASE}${url}`;
-  return `${BACKEND_BASE}/${url}`;
-};
 
 const fileTypes = [
   { label: "PDF", color: "text-rose-500" },
@@ -120,6 +132,7 @@ const isImageFile = (file: File) => file.type.startsWith("image/");
 
 export default function Home() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [backendBase, setBackendBase] = useState(INITIAL_BACKEND_BASE);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [dragging, setDragging] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -148,6 +161,21 @@ export default function Home() {
   >(null);
   const fileInputId = useId();
   const uploadHelpId = `${fileInputId}-help`;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setBackendBase(sanitizeBase(resolveBrowserBackendBase(rawBackendOrigin)));
+  }, []);
+
+  const toAbsoluteUrl = useCallback(
+    (url: string | null | undefined): string | null => {
+      if (!url) return null;
+      if (/^https?:\/\//i.test(url)) return url;
+      if (url.startsWith("/")) return `${backendBase}${url}`;
+      return `${backendBase}/${url}`;
+    },
+    [backendBase],
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -313,7 +341,8 @@ export default function Home() {
         formData.append("llm_base_url", cleanedBase);
       }
 
-      const response = await fetch(ANALYZE_ENDPOINT, {
+      const analyzeEndpoint = `${backendBase}/analyze`;
+      const response = await fetch(analyzeEndpoint, {
         method: "POST",
         body: formData,
       });
@@ -420,7 +449,7 @@ export default function Home() {
     } finally {
       setIsAnalyzing(false);
     }
-  }, [selectedFiles, apiKey, llmBaseUrl]);
+  }, [selectedFiles, apiKey, llmBaseUrl, backendBase]);
 
   const ensureMindmap = useCallback(async () => {
     if (!selectedFiles.length) {
@@ -443,7 +472,8 @@ export default function Home() {
         formData.append("llm_base_url", cleanedBase);
       }
 
-      const response = await fetch(MINDMAP_ENDPOINT, {
+      const mindmapEndpoint = `${backendBase}/mindmap`;
+      const response = await fetch(mindmapEndpoint, {
         method: "POST",
         body: formData,
       });
@@ -469,7 +499,7 @@ export default function Home() {
     } finally {
       setIsMindmapLoading(false);
     }
-  }, [selectedFiles, mindmapResult, isMindmapLoading, apiKey, llmBaseUrl]);
+  }, [selectedFiles, mindmapResult, isMindmapLoading, apiKey, llmBaseUrl, backendBase, toAbsoluteUrl]);
 
   const handleFeatureSelect = useCallback(
     async (feature: FeatureKey) => {
