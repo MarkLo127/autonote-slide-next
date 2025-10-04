@@ -10,7 +10,7 @@ from backend.app.models.schemas import AnalyzeResponse, LLMSettings, PageSummary
 from backend.app.services.analyze.page_classifier import classify_page
 from backend.app.services.analyze.page_parser import parse_pages
 from backend.app.services.analyze.summary_engine import SummaryEngine, SYSTEM_PROMPT
-from backend.app.services.nlp.language_detect import detect_lang
+from backend.app.services.nlp.language_detect import detect_lang, determine_visual_language
 from backend.app.services.nlp.keyword_extractor import extract_keywords_by_paragraph
 from backend.app.services.storage import make_public_url, save_upload
 from backend.app.services.wordcloud.wordcloud_gen import build_wordcloud
@@ -96,6 +96,7 @@ async def analyze_file(
 
                 joined_text = "\n".join(page.text for page in pages)
                 language = detect_lang(joined_text)
+                visual_language = determine_visual_language(joined_text, language)
 
                 paragraph_objs = [
                     Paragraph(index=idx, text=page.text or "", start_char=0, end_char=len(page.text or ""))
@@ -104,9 +105,15 @@ async def analyze_file(
                 paragraph_keywords = extract_keywords_by_paragraph(paragraph_objs, language)
                 keyword_lookup = {item["paragraph_index"]: item["keywords"] for item in paragraph_keywords}
 
+                visual_keywords = (
+                    paragraph_keywords
+                    if visual_language == language
+                    else extract_keywords_by_paragraph(paragraph_objs, visual_language)
+                )
+
                 wordcloud_url = None
                 try:
-                    wc_path = build_wordcloud(paragraph_keywords, language, joined_text)
+                    wc_path = build_wordcloud(visual_keywords, visual_language, joined_text)
                     wordcloud_url = make_public_url(wc_path)
                 except Exception as exc:  # pylint: disable=broad-except
                     reason = "文字雲生成失敗"

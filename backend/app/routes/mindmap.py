@@ -11,7 +11,7 @@ from backend.app.services.mindmap.mindmap_gen import (
     select_root_label,
 )
 from backend.app.services.nlp.keyword_extractor import extract_keywords_by_paragraph
-from backend.app.services.nlp.language_detect import detect_lang
+from backend.app.services.nlp.language_detect import detect_lang, determine_visual_language
 from backend.app.services.nlp.segmenter import ensure_offsets_if_needed
 from backend.app.services.parsing.file_loader import load_file_as_text_and_paragraphs
 from backend.app.services.storage import make_public_url, save_upload
@@ -50,6 +50,7 @@ async def mindmap_endpoint(
         raise HTTPException(400, "檔案內容為空，或解析不到文字（掃描 PDF 可考慮加 OCR）")
 
     lang = detect_lang(full_text)
+    visual_lang = determine_visual_language(full_text, lang)
     paragraphs = ensure_offsets_if_needed(full_text, paragraphs)
     doc_title = infer_doc_title(paragraphs, file.filename or "Document")
 
@@ -57,25 +58,25 @@ async def mindmap_endpoint(
     para_payload = [p.model_dump() for p in paragraphs]
 
     # 3) 關鍵字（每段）
-    paragraph_keywords = extract_keywords_by_paragraph(paragraphs, lang)
+    paragraph_keywords = extract_keywords_by_paragraph(paragraphs, visual_lang)
 
     # 4) 生成 Mermaid mindmap
     # doc title 盡量取原檔名；沒有就用 meta/title
-    doc_title = select_root_label(paragraph_keywords, doc_title)
-    mmd_text = build_mermaid_mindmap(doc_title, paragraph_keywords, top_k=8, max_refs_per_kw=5)
-    mmd_abs, _ = save_mermaid(mmd_text, name_hint=doc_title)
+    root_title = select_root_label(paragraph_keywords, doc_title)
+    mmd_text = build_mermaid_mindmap(root_title, paragraph_keywords, top_k=8, max_refs_per_kw=5)
+    mmd_abs, _ = save_mermaid(mmd_text, name_hint=root_title)
 
-    graph = build_graphviz_mindmap(doc_title, paragraph_keywords, top_k=8, max_refs_per_kw=5)
-    png_abs, png_name = save_graphviz_png(graph, name_hint=doc_title)
+    graph = build_graphviz_mindmap(root_title, paragraph_keywords, top_k=8, max_refs_per_kw=5)
+    png_abs, png_name = save_graphviz_png(graph, name_hint=root_title)
 
     # 5) 對外 URL
     mmd_url = make_public_url(mmd_abs)
 
     return {
-        "language": lang,
+        "language": visual_lang,
         "paragraphs": para_payload,
         "paragraph_keywords": paragraph_keywords,
-        "doc_title": doc_title,
+        "doc_title": root_title,
         "mindmap_mermaid": mmd_text,
         "mindmap_file_url": mmd_url,           # e.g. /static/mindmaps/xxx.mmd
         "mindmap_image_url": make_public_url(png_abs) if png_abs else None,

@@ -8,6 +8,8 @@ from wordcloud import WordCloud
 
 from backend.app.core.config import DEFAULT_EN_FONT, DEFAULT_ZH_FONT, WORDCLOUD_DIR
 
+EN_WORD_RE = re.compile(r"[A-Za-z][A-Za-z\-']{1,}")
+
 
 def _tokenize_fallback(text: Optional[str], lang: str) -> List[str]:
     if not text:
@@ -38,6 +40,12 @@ def build_wordcloud(paragraph_keywords: List[Dict], lang: str, fallback_text: Op
 
     if not collected and fallback_text:
         collected = _tokenize_fallback(fallback_text, lang)
+
+    lowered_lang = (lang or '').lower()
+    if lowered_lang.startswith('en'):
+        english_only = [word for word in collected if EN_WORD_RE.search(word)]
+        if english_only:
+            collected = english_only
 
     # WordCloud 需要至少一個詞彙才能生成
     if not collected:

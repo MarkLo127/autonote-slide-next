@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unicodedata
+import re
 from typing import Iterable, Tuple
 
 from langdetect import detect, detect_langs  # type: ignore
@@ -29,6 +30,12 @@ def _strip_control(text: str) -> str:
     return "".join(
         char for char in text if unicodedata.category(char)[0] != "C"
     )
+
+EN_WORD_RE = re.compile(r"[A-Za-z]{3,}")
+
+
+def _count_ascii_letters(text: str) -> int:
+    return sum(1 for char in text if char.isascii() and char.isalpha())
 
 
 def detect_lang(text: str) -> str:
@@ -71,3 +78,33 @@ def detect_lang(text: str) -> str:
             return "zh"
 
     return primary
+
+def determine_visual_language(text: str, detected_lang: str) -> str:
+    base = (detected_lang or "en").lower()
+    if base.startswith("en"):
+        return "en"
+
+    sample = _strip_control((text or "")[:8000])
+    if not sample:
+        return detected_lang
+
+    english_letters = _count_ascii_letters(sample)
+    if english_letters == 0:
+        return detected_lang
+
+    english_words = {word.lower() for word in EN_WORD_RE.findall(sample)}
+    cjk_count, _ = _cjk_hangul_counts(sample)
+
+    if not english_words:
+        return detected_lang
+
+    total_letters = english_letters + cjk_count
+    if base.startswith("zh") and english_letters >= 30 and cjk_count >= 30:
+        ratio = english_letters / max(total_letters, 1)
+        if ratio >= 0.25 or len(english_words) >= 12:
+            return "en"
+
+    if english_letters >= 80 and len(english_words) >= 20:
+        return "en"
+
+    return detected_lang
