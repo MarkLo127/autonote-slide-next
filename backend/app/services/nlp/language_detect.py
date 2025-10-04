@@ -1,8 +1,73 @@
-from langdetect import detect
+from __future__ import annotations
+
+import unicodedata
+from typing import Iterable, Tuple
+
+from langdetect import detect, detect_langs  # type: ignore
+from langdetect.lang_detect_exception import LangDetectException
+
+
+def _count_chars(text: str, ranges: Iterable[Tuple[int, int]]) -> int:
+    return sum(1 for char in text for start, end in ranges if start <= ord(char) <= end)
+
+def _cjk_hangul_counts(text: str) -> Tuple[int, int]:
+    cjk_ranges = (
+        (0x4E00, 0x9FFF),
+        (0x3400, 0x4DBF),
+    )
+    hangul_ranges = (
+        (0xAC00, 0xD7A3),
+        (0x1100, 0x11FF),
+        (0x3130, 0x318F),
+    )
+    cjk_count = _count_chars(text, cjk_ranges)
+    hangul_count = _count_chars(text, hangul_ranges)
+    return cjk_count, hangul_count
+
+
+def _strip_control(text: str) -> str:
+    return "".join(
+        char for char in text if unicodedata.category(char)[0] != "C"
+    )
+
 
 def detect_lang(text: str) -> str:
-    try:
-        code = detect(text[:5000])
-        return "zh" if code.startswith("zh") else code
-    except Exception:
+    sample = _strip_control(text[:5000])
+    if not sample:
         return "en"
+
+    try:
+        # Use probability list so we can reason about confidence levels.
+        lang_probs = detect_langs(sample)
+    except LangDetectException:
+        try:
+            return detect(sample)
+        except LangDetectException:
+            return "en"
+
+    if not lang_probs:
+        return "en"
+
+    primary_entry = lang_probs[0]
+    primary = primary_entry.lang
+    primary_prob = getattr(primary_entry, "prob", 0.0) or 0.0
+
+    if primary.startswith("zh"):
+        return "zh"
+
+    zh_prob = max(
+        (entry.prob for entry in lang_probs if entry.lang.startswith("zh")),
+        default=0.0,
+    )
+    if zh_prob and (zh_prob >= 0.4 or zh_prob >= primary_prob * 0.9):
+        return "zh"
+
+    if primary == "ko":
+        cjk_count, hangul_count = _cjk_hangul_counts(sample)
+        # langdetect 偶爾會將中文誤判為韓文；若幾乎無韓文字且有大量 CJK 字元，則視為中文。
+        if cjk_count >= 20 and hangul_count == 0:
+            return "zh"
+        if hangul_count > 0 and cjk_count >= hangul_count * 4:
+            return "zh"
+
+    return primary
