@@ -313,6 +313,34 @@ export default function Home() {
 
   const selectedFileName = selectedFiles[0]?.name ?? "";
 
+  const openPageSummaryViewer = useCallback(
+    (page: PageSummary) => {
+      if (!analysisResult) return;
+      try {
+        const payload = {
+          page_number: page.page_number,
+          classification: page.classification,
+          bullets: page.bullets,
+          keywords: page.keywords,
+          skipped: page.skipped,
+          skip_reason: page.skip_reason ?? null,
+          language: analysisResult.language,
+          total_pages: analysisResult.total_pages,
+          document_title: selectedFileName || null,
+        };
+        const params = new URLSearchParams({
+          data: JSON.stringify(payload),
+        });
+        params.set("viewer", "page");
+        const viewerUrl = `/page-summary/viewer?${params.toString()}`;
+        window.open(viewerUrl, "_blank", "noopener,noreferrer");
+      } catch (err) {
+        console.error("開啟逐頁重點檢視器失敗", err);
+      }
+    },
+    [analysisResult, selectedFileName],
+  );
+
   const handleAnalyze = useCallback(async () => {
     if (!selectedFiles.length) {
       setError("請先選擇要上傳的檔案");
@@ -854,13 +882,33 @@ export default function Home() {
                 key={page.page_number}
                 className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm"
               >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-semibold text-slate-700">
-                    第 {page.page_number} 頁
-                  </span>
-                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
-                    {classificationMap[page.classification] ?? page.classification}
-                  </span>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-slate-700">
+                      第 {page.page_number} 頁
+                    </span>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+                      {classificationMap[page.classification] ?? page.classification}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openPageSummaryViewer(page)}
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-400 hover:text-slate-800"
+                  >
+                    放大查看
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      className="h-3.5 w-3.5"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 10h4.5M19.5 10V5.5M5 19l5.5-5.5M5 19v-4.5" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 9v-2a2.5 2.5 0 0 1 2.5-2.5h2M19.5 15v2a2.5 2.5 0 0 1-2.5 2.5h-2" />
+                    </svg>
+                  </button>
                 </div>
                 <ul className="mt-3 space-y-2 text-sm leading-7 text-slate-700">
                   {page.bullets.map((bullet, idx) => (
