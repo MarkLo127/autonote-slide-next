@@ -561,23 +561,7 @@ export default function Home() {
             <div className="text-right">
               <button
                 type="button"
-                onClick={() => {
-                  if (!mindmapResult?.mindmap_image_url) return;
-                  const params = new URLSearchParams({
-                    image: mindmapResult.mindmap_image_url,
-                  });
-                  if (mindmapResult.doc_title) {
-                    params.set("title", mindmapResult.doc_title);
-                  }
-                  if (mindmapResult.language) {
-                    params.set("lang", mindmapResult.language);
-                  }
-                  if (mindmapResult.mindmap_file_url) {
-                    params.set("file", mindmapResult.mindmap_file_url);
-                  }
-                  const viewerUrl = `/mindmap/viewer?${params.toString()}`;
-                  window.open(viewerUrl, "_blank", "noopener,noreferrer");
-                }}
+                onClick={() => window.open(mindmapResult.mindmap_image_url ?? undefined, "_blank")}
                 className="inline-flex items-center gap-2 rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-400 hover:text-slate-800"
               >
                 放大查看
