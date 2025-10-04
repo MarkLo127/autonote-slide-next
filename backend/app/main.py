@@ -4,9 +4,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, PlainTextResponse
 import os
 
-from backend.app.routes import analyze, health
-from backend.app.core.config import STATIC_MOUNT, STATIC_DIR
 from backend.app.routes import analyze, health, mindmap
+from backend.app.core.config import ASSETS_DIR, ASSETS_MOUNT, STATIC_DIR, STATIC_MOUNT
 
 app = FastAPI(
     title="AutoNoteSlide API",
@@ -30,6 +29,7 @@ app.add_middleware(
 # ===== 靜態檔（文字雲、上傳預覽）=====
 # check_dir=False：就算 storage/ 尚未存在也能啟動
 app.mount(STATIC_MOUNT, StaticFiles(directory=STATIC_DIR, check_dir=False), name="static")
+app.mount(ASSETS_MOUNT, StaticFiles(directory=ASSETS_DIR, check_dir=False), name="assets")
 
 # ===== 首頁導向到 /docs =====
 @app.get("/", include_in_schema=False)

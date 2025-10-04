@@ -603,6 +603,8 @@ export default function Home() {
         mindmapData = await ensureMindmap();
       }
 
+      const pdfFontUrl = toAbsoluteUrl("/assets/fonts/Noto_Sans_TC/NotoSansTC-VariableFont_wght.ttf");
+
       const pdfBytes = await generateAnalysisPdf({
         documentTitle: selectedFileName || "未命名檔案",
         languageLabel,
@@ -612,6 +614,7 @@ export default function Home() {
         pageSummaries: analysisResult.page_summaries,
         wordcloudUrl: analysisResult.wordcloud_image_url ?? undefined,
         mindmapImageUrl: mindmapData?.mindmap_image_url ?? undefined,
+        fontUrl: pdfFontUrl ?? undefined,
       });
 
       const arrayBuffer = pdfBytes.buffer.slice(
@@ -644,6 +647,7 @@ export default function Home() {
     ensureMindmap,
     mindmapResult,
     selectedFileName,
+    toAbsoluteUrl,
   ]);
 
   const renderMindmap = () => {

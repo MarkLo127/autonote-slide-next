@@ -12,6 +12,7 @@ FONTS_DIR = os.path.join(ASSETS_DIR, "fonts")
 
 STATIC_DIR = STORAGE_DIR
 STATIC_MOUNT = "/static"
+ASSETS_MOUNT = "/assets"
 
 # === 字型自動搜尋 ===
 FONT_EXTS = (".ttf", ".otf", ".ttc")

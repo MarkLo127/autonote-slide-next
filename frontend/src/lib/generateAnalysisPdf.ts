@@ -29,8 +29,11 @@ export type PdfAnalysisPayload = {
   pageSummaries: PdfPageSummary[];
   wordcloudUrl?: string | null;
   mindmapImageUrl?: string | null;
+  fontUrl?: string | null;
 };
 
+const PDF_FONT_FAMILY = "NotoSansTCPdf";
+const FONT_STACK = `${PDF_FONT_FAMILY}, 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', 'Heiti TC', sans-serif`;
 const PAGE_WIDTH = 1190;
 const PAGE_HEIGHT = 1684;
 const PDF_PAGE_WIDTH = 595.28; // A4 width in points
@@ -42,6 +45,48 @@ const SECTION_GAP = 32;
 const HEADING_COLOR = "#111827";
 const BODY_COLOR = "#1f2937";
 const MUTED_COLOR = "#6b7280";
+
+let fontLoadPromise: Promise<void> | null = null;
+let pdfFontLoaded = false;
+
+const buildFont = (size: number, weight = 400) => {
+  const weightPart = weight === 400 ? '' : `${weight} `;
+  return `${weightPart}${size}px ${FONT_STACK}`;
+};
+
+const ensurePrimaryFont = async (fontUrl?: string | null) => {
+  if (pdfFontLoaded || !fontUrl) return;
+  if (typeof document === 'undefined' || typeof FontFace === 'undefined' || !('fonts' in document)) return;
+
+  if (!fontLoadPromise) {
+    fontLoadPromise = (async () => {
+      try {
+        const fontFace = new FontFace(
+          PDF_FONT_FAMILY,
+          `url(${fontUrl})`,
+          { weight: '100 900' },
+        );
+        const loaded = await fontFace.load();
+        document.fonts.add(loaded);
+        await document.fonts.ready;
+        pdfFontLoaded = true;
+      } catch (err) {
+        pdfFontLoaded = false;
+        console.warn('PDF 字型載入失敗，將改用系統字型', err);
+      }
+    })();
+  }
+
+  try {
+    await fontLoadPromise;
+  } catch {
+    fontLoadPromise = null;
+  }
+
+  if (!pdfFontLoaded) {
+    fontLoadPromise = null;
+  }
+};
 
 const CLASSIFICATION_LABEL: Record<string, string> = {
   normal: "一般內容",
@@ -71,7 +116,7 @@ const createPage = (pageNumber: number): PageContext => {
   ctx.fillRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
   ctx.textBaseline = "top";
   ctx.fillStyle = BODY_COLOR;
-  ctx.font = "16px 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif";
+  ctx.font = buildFont(16);
 
   return {
     canvas,
@@ -84,7 +129,7 @@ const createPage = (pageNumber: number): PageContext => {
 const drawFooter = (ctx: CanvasRenderingContext2D, pageNumber: number) => {
   ctx.save();
   ctx.fillStyle = MUTED_COLOR;
-  ctx.font = "14px 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif";
+  ctx.font = buildFont(14);
   ctx.fillText(
     `第 ${pageNumber} 頁`,
     PAGE_WIDTH - MARGIN_X - ctx.measureText(`第 ${pageNumber} 頁`).width,
@@ -129,7 +174,7 @@ const drawParagraph = (
   options?: { font?: string; color?: string; lineHeight?: number; gapAfter?: number },
   ensureSpace?: () => void,
 ) => {
-  const font = options?.font ?? "16px 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif";
+  const font = options?.font ?? buildFont(16);
   const color = options?.color ?? BODY_COLOR;
   const lineHeight = options?.lineHeight ?? 26;
   const gapAfter = options?.gapAfter ?? 12;
@@ -164,7 +209,7 @@ const drawBulletList = (
 ) => {
   const lineHeight = options?.lineHeight ?? 26;
   const bulletSpacing = options?.bulletSpacing ?? 10;
-  const font = "16px 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif";
+  const font = buildFont(16);
 
   let ctx = context.ctx;
   ctx.save();
@@ -229,6 +274,8 @@ const loadImage = async (url: string): Promise<HTMLImageElement> =>
   });
 
 export const generateAnalysisPdf = async (payload: PdfAnalysisPayload): Promise<Uint8Array> => {
+  await ensurePrimaryFont(payload.fontUrl);
+
   const pages: HTMLCanvasElement[] = [];
   const current = createPage(1);
 
@@ -251,19 +298,19 @@ export const generateAnalysisPdf = async (payload: PdfAnalysisPayload): Promise<
   // 報告抬頭
   current.ctx.save();
   current.ctx.fillStyle = HEADING_COLOR;
-  current.ctx.font = "700 32px 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif";
+  current.ctx.font = buildFont(32, 700);
   const title = "分析報告";
   current.ctx.fillText(title, MARGIN_X, current.cursorY);
   current.cursorY += 46;
 
-  current.ctx.font = "600 24px 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif";
+  current.ctx.font = buildFont(24, 600);
   current.ctx.fillText(payload.documentTitle || "未命名檔案", MARGIN_X, current.cursorY);
   current.cursorY += 38;
 
   current.ctx.restore();
 
   current.ctx.save();
-  current.ctx.font = "15px 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif";
+  current.ctx.font = buildFont(15);
   current.ctx.fillStyle = MUTED_COLOR;
   const metaPieces = [
     payload.languageLabel ? `語言：${payload.languageLabel}` : null,
@@ -277,7 +324,7 @@ export const generateAnalysisPdf = async (payload: PdfAnalysisPayload): Promise<
     ensureSpace(80);
     current.ctx.save();
     current.ctx.fillStyle = HEADING_COLOR;
-    current.ctx.font = "600 22px 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif";
+    current.ctx.font = buildFont(22, 600);
     current.ctx.fillText(text, MARGIN_X, current.cursorY);
     current.ctx.restore();
     current.cursorY += 34;
@@ -287,7 +334,7 @@ export const generateAnalysisPdf = async (payload: PdfAnalysisPayload): Promise<
     ensureSpace(50);
     current.ctx.save();
     current.ctx.fillStyle = HEADING_COLOR;
-    current.ctx.font = "600 18px 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif";
+    current.ctx.font = buildFont(18, 600);
     current.ctx.fillText(text, MARGIN_X, current.cursorY);
     current.ctx.restore();
     current.cursorY += 28;
@@ -370,7 +417,7 @@ export const generateAnalysisPdf = async (payload: PdfAnalysisPayload): Promise<
   const drawPageSummaryHeading = () => {
     current.ctx.save();
     current.ctx.fillStyle = HEADING_COLOR;
-    current.ctx.font = "600 24px 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif";
+    current.ctx.font = buildFont(24, 600);
     current.ctx.fillText("逐頁重點摘要", MARGIN_X, current.cursorY);
     current.ctx.restore();
     current.cursorY += 38;
@@ -385,11 +432,11 @@ export const generateAnalysisPdf = async (payload: PdfAnalysisPayload): Promise<
 
     current.ctx.save();
     current.ctx.fillStyle = HEADING_COLOR;
-    current.ctx.font = "600 18px 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif";
+    current.ctx.font = buildFont(18, 600);
     current.ctx.fillText(`第 ${summary.page_number} 頁`, MARGIN_X, current.cursorY);
     const meta = summary.skipped && summary.skip_reason ? "（已跳過）" : classificationLabel;
     current.ctx.fillStyle = MUTED_COLOR;
-    current.ctx.font = "15px 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif";
+    current.ctx.font = buildFont(15);
     const metaText = ` ${meta}`;
     current.ctx.fillText(metaText, MARGIN_X + current.ctx.measureText(`第 ${summary.page_number} 頁`).width + 6, current.cursorY + 2);
     current.ctx.restore();
@@ -401,11 +448,11 @@ export const generateAnalysisPdf = async (payload: PdfAnalysisPayload): Promise<
         drawPageSummaryHeading();
         current.ctx.save();
         current.ctx.fillStyle = HEADING_COLOR;
-        current.ctx.font = "600 18px 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif";
+        current.ctx.font = buildFont(18, 600);
         current.ctx.fillText(`第 ${summary.page_number} 頁`, MARGIN_X, current.cursorY);
         const newMeta = summary.skipped && summary.skip_reason ? "（已跳過）" : classificationLabel;
         current.ctx.fillStyle = MUTED_COLOR;
-        current.ctx.font = "15px 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif";
+        current.ctx.font = buildFont(15);
         current.ctx.fillText(
           ` ${newMeta}`,
           MARGIN_X + current.ctx.measureText(`第 ${summary.page_number} 頁`).width + 6,
@@ -424,7 +471,7 @@ export const generateAnalysisPdf = async (payload: PdfAnalysisPayload): Promise<
           drawPageSummaryHeading();
           current.ctx.save();
           current.ctx.fillStyle = HEADING_COLOR;
-          current.ctx.font = "600 18px 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif";
+          current.ctx.font = buildFont(18, 600);
           current.ctx.fillText(`第 ${summary.page_number} 頁`, MARGIN_X, current.cursorY);
           current.ctx.restore();
           current.cursorY += 28;
@@ -443,7 +490,7 @@ export const generateAnalysisPdf = async (payload: PdfAnalysisPayload): Promise<
           drawPageSummaryHeading();
           current.ctx.save();
           current.ctx.fillStyle = HEADING_COLOR;
-          current.ctx.font = "600 18px 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif";
+          current.ctx.font = buildFont(18, 600);
           current.ctx.fillText(`第 ${summary.page_number} 頁`, MARGIN_X, current.cursorY);
           current.ctx.restore();
           current.cursorY += 28;
@@ -461,7 +508,7 @@ export const generateAnalysisPdf = async (payload: PdfAnalysisPayload): Promise<
           drawPageSummaryHeading();
           current.ctx.save();
           current.ctx.fillStyle = HEADING_COLOR;
-          current.ctx.font = "600 18px 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif";
+          current.ctx.font = buildFont(18, 600);
           current.ctx.fillText(`第 ${summary.page_number} 頁`, MARGIN_X, current.cursorY);
           current.ctx.restore();
           current.cursorY += 28;
@@ -482,7 +529,7 @@ export const generateAnalysisPdf = async (payload: PdfAnalysisPayload): Promise<
 
     current.ctx.save();
     current.ctx.fillStyle = HEADING_COLOR;
-    current.ctx.font = "600 26px 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif";
+    current.ctx.font = buildFont(26, 600);
     current.ctx.fillText(title, MARGIN_X, current.cursorY);
     current.ctx.restore();
     current.cursorY += 40;

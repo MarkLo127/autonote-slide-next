@@ -106,16 +106,17 @@ async def analyze_file(
 
                 wordcloud_url = None
                 try:
-                    all_keywords = [kw for item in paragraph_keywords for kw in item["keywords"]]
-                    if all_keywords:
-                        wc_path = build_wordcloud(paragraph_keywords, language)
-                        wordcloud_url = make_public_url(wc_path)
+                    wc_path = build_wordcloud(paragraph_keywords, language, joined_text)
+                    wordcloud_url = make_public_url(wc_path)
                 except Exception as exc:  # pylint: disable=broad-except
+                    reason = "文字雲生成失敗"
+                    if isinstance(exc, RuntimeError) and "不足" in str(exc):
+                        reason = "文字雲素材不足"
                     await push_event(
                         {
                             "type": "progress",
                             "progress": 95,
-                            "message": f"文字雲生成失敗：{exc}",
+                            "message": f"{reason}：{exc}",
                         }
                     )
 
