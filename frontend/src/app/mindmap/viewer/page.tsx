@@ -15,6 +15,7 @@ type MindmapViewerProps = {
     title?: SearchParamValue;
     lang?: SearchParamValue;
     file?: SearchParamValue;
+    viewer?: SearchParamValue;
   };
 };
 
@@ -25,9 +26,29 @@ const toSingleValue = (value: SearchParamValue) => {
   return value ?? "";
 };
 
+const VIEWER_DEFAULTS: Record<string, { header: string; title: string; downloadLabel: string }> = {
+  mindmap: {
+    header: "Mindmap Viewer",
+    title: "心智圖放大檢視",
+    downloadLabel: "下載 Mermaid 檔",
+  },
+  wordcloud: {
+    header: "Wordcloud Viewer",
+    title: "文字雲放大檢視",
+    downloadLabel: "下載原始檔",
+  },
+  default: {
+    header: "Image Viewer",
+    title: "圖像放大檢視",
+    downloadLabel: "下載原始檔",
+  },
+};
+
 export default function MindmapViewer({ searchParams }: MindmapViewerProps) {
   const imageUrl = toSingleValue(searchParams?.image);
-  const title = toSingleValue(searchParams?.title) || "心智圖放大檢視";
+  const viewerMode = toSingleValue(searchParams?.viewer)?.toLowerCase() || "mindmap";
+  const viewerConfig = VIEWER_DEFAULTS[viewerMode] ?? VIEWER_DEFAULTS.default;
+  const title = toSingleValue(searchParams?.title) || viewerConfig.title;
   const lang = toSingleValue(searchParams?.lang);
   const fileUrl = toSingleValue(searchParams?.file);
 
@@ -49,7 +70,7 @@ export default function MindmapViewer({ searchParams }: MindmapViewerProps) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-slate-950 text-slate-200">
         <div className="rounded-3xl border border-slate-800 bg-slate-900/80 px-8 py-10 text-center">
-          <h1 className="text-xl font-semibold text-white">找不到心智圖圖片</h1>
+          <h1 className="text-xl font-semibold text-white">找不到圖像資源</h1>
           <p className="mt-3 text-sm text-slate-400">
             請確保從分析頁面透過「放大查看」開啟此頁面。
           </p>
@@ -63,7 +84,7 @@ export default function MindmapViewer({ searchParams }: MindmapViewerProps) {
       <header className="border-b border-slate-800 bg-slate-900/90 px-6 py-4 shadow-md">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-1">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Mindmap Viewer</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{viewerConfig.header}</p>
             <h1 className="text-lg font-semibold text-white">{title}</h1>
             {headerSubtitle ? (
               <p className="text-sm text-slate-400">{headerSubtitle}</p>
@@ -77,7 +98,7 @@ export default function MindmapViewer({ searchParams }: MindmapViewerProps) {
                 rel="noopener noreferrer"
                 className="rounded-full border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-indigo-400 hover:text-white"
               >
-                下載 Mermaid 檔
+                {viewerConfig.downloadLabel}
               </a>
             ) : null}
             <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/70 px-2 py-1 text-xs text-slate-400">
@@ -137,4 +158,3 @@ export default function MindmapViewer({ searchParams }: MindmapViewerProps) {
     </div>
   );
 }
-

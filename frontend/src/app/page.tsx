@@ -561,7 +561,24 @@ export default function Home() {
             <div className="text-right">
               <button
                 type="button"
-                onClick={() => window.open(mindmapResult.mindmap_image_url ?? undefined, "_blank")}
+                onClick={() => {
+                  if (!mindmapResult?.mindmap_image_url) return;
+                  const params = new URLSearchParams({
+                    image: mindmapResult.mindmap_image_url,
+                    viewer: "mindmap",
+                  });
+                  if (mindmapResult.doc_title) {
+                    params.set("title", mindmapResult.doc_title);
+                  }
+                  if (mindmapResult.language) {
+                    params.set("lang", mindmapResult.language);
+                  }
+                  if (mindmapResult.mindmap_file_url) {
+                    params.set("file", mindmapResult.mindmap_file_url);
+                  }
+                  const viewerUrl = `/mindmap/viewer?${params.toString()}`;
+                  window.open(viewerUrl, "_blank", "noopener,noreferrer");
+                }}
                 className="inline-flex items-center gap-2 rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-400 hover:text-slate-800"
               >
                 放大查看
@@ -779,14 +796,48 @@ export default function Home() {
             <div className="rounded-2xl border border-slate-200 bg-white/90 p-5">
               <h4 className="text-sm font-semibold text-slate-600">文字雲</h4>
               {analysisResult.wordcloud_image_url ? (
-                <div className="relative mt-3 aspect-[4/3] w-full overflow-hidden rounded-xl border border-slate-200">
-                  <Image
-                    src={analysisResult.wordcloud_image_url}
-                    alt="關鍵字文字雲"
-                    fill
-                    className="object-contain"
-                    unoptimized
-                  />
+                <div className="space-y-3">
+                  <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-slate-200">
+                    <Image
+                      src={analysisResult.wordcloud_image_url}
+                      alt="關鍵字文字雲"
+                      fill
+                      className="object-contain"
+                      unoptimized
+                    />
+                  </div>
+                  <div className="text-right">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!analysisResult.wordcloud_image_url) return;
+                        const params = new URLSearchParams({
+                          image: analysisResult.wordcloud_image_url,
+                          viewer: "wordcloud",
+                          title: "文字雲",
+                        });
+                        if (analysisResult.language) {
+                          params.set("lang", analysisResult.language);
+                        }
+                        const viewerUrl = `/mindmap/viewer?${params.toString()}`;
+                        window.open(viewerUrl, "_blank", "noopener,noreferrer");
+                      }}
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-400 hover:text-slate-800"
+                    >
+                      放大查看
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        className="h-4 w-4"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10h4.5M19.5 10V5.5M5 19l5.5-5.5M5 19v-4.5" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 9v-2a2.5 2.5 0 0 1 2.5-2.5h2M19.5 15v2a2.5 2.5 0 0 1-2.5 2.5h-2" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <p className="mt-3 text-sm text-slate-500">尚未取得文字雲。</p>
