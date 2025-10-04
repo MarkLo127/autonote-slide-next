@@ -614,7 +614,11 @@ export default function Home() {
         mindmapImageUrl: mindmapData?.mindmap_image_url ?? undefined,
       });
 
-      const blob = new Blob([pdfBytes], { type: "application/pdf" });
+      const arrayBuffer = pdfBytes.buffer.slice(
+        pdfBytes.byteOffset,
+        pdfBytes.byteOffset + pdfBytes.byteLength,
+      );
+      const blob = new Blob([arrayBuffer], { type: "application/pdf" });
       const downloadUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       const baseName = (selectedFileName || "分析報告")
