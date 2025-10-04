@@ -618,7 +618,7 @@ export default function Home() {
         pdfBytes.byteOffset,
         pdfBytes.byteOffset + pdfBytes.byteLength,
       );
-      const blob = new Blob([arrayBuffer], { type: "application/pdf" });
+      const blob = new Blob([arrayBuffer as ArrayBuffer], { type: "application/pdf" });
       const downloadUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       const baseName = (selectedFileName || "分析報告")
