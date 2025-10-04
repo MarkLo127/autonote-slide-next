@@ -4,11 +4,14 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type DragEvent,
 } from "react";
 import Image from "next/image";
+
+import { generateAnalysisPdf } from "@/lib/generateAnalysisPdf";
 
 type Paragraph = {
   index: number;
@@ -132,6 +135,7 @@ const isImageFile = (file: File) => file.type.startsWith("image/");
 
 export default function Home() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const mindmapRequestRef = useRef<Promise<MindmapResponse | null> | null>(null);
   const [backendBase, setBackendBase] = useState(INITIAL_BACKEND_BASE);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -158,7 +162,20 @@ export default function Home() {
   const [analysisProgress, setAnalysisProgress] = useState<
     { value: number; message: string } | null
   >(null);
+  const [isDownloading, setIsDownloading] = useState(false);
   const fileInputId = useId();
+  const aggregatedKeywords = useMemo(() => {
+    if (!analysisResult) return [];
+    return Array.from(
+      new Set(
+        analysisResult.page_summaries
+          .map((page) => page.keywords.slice(0, 4))
+          .flat()
+          .filter((kw) => kw.trim().length > 0),
+      ),
+    ).slice(0, 24);
+  }, [analysisResult]);
+
   const uploadHelpId = `${fileInputId}-help`;
 
   useEffect(() => {
@@ -486,55 +503,77 @@ export default function Home() {
     }
   }, [selectedFiles, apiKey, llmBaseUrl, backendBase, toAbsoluteUrl]);
 
-  const ensureMindmap = useCallback(async () => {
-    if (!selectedFiles.length) {
-      setMindmapError("請先選擇檔案");
-      return;
-    }
-    if (mindmapResult || isMindmapLoading) return;
-
-    setMindmapError(null);
-    setIsMindmapLoading(true);
-
-    try {
-      const formData = new FormData();
-      formData.append("file", selectedFiles[0]);
-      if (apiKey.trim()) {
-        formData.append("llm_api_key", apiKey);
-      }
-      const cleanedBase = normalizeOptionalUrl(llmBaseUrl);
-      if (cleanedBase) {
-        formData.append("llm_base_url", cleanedBase);
+  const ensureMindmap = useCallback(
+    async (options?: { silent?: boolean }): Promise<MindmapResponse | null> => {
+      if (mindmapResult) {
+        return mindmapResult;
       }
 
-      const mindmapEndpoint = `${backendBase}/mindmap`;
-      const response = await fetch(mindmapEndpoint, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || "心智圖生成失敗");
+      if (!selectedFiles.length) {
+        if (!options?.silent) {
+          setMindmapError("請先選擇檔案");
+        }
+        return null;
       }
 
-      const data = (await response.json()) as MindmapResponse;
-      const normalized: MindmapResponse = {
-        ...data,
-        mindmap_file_url: toAbsoluteUrl(data.mindmap_file_url),
-        mindmap_image_url: toAbsoluteUrl(data.mindmap_image_url),
-        source_upload_url: toAbsoluteUrl(data.source_upload_url),
-      };
-      setMindmapResult(normalized);
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "心智圖生成時發生未知錯誤";
-      setMindmapError(message);
-      setMindmapResult(null);
-    } finally {
-      setIsMindmapLoading(false);
-    }
-  }, [selectedFiles, mindmapResult, isMindmapLoading, apiKey, llmBaseUrl, backendBase, toAbsoluteUrl]);
+      if (mindmapRequestRef.current) {
+        return mindmapRequestRef.current;
+      }
+
+      const fetchPromise = (async () => {
+        setMindmapError(null);
+        setIsMindmapLoading(true);
+
+        try {
+          const formData = new FormData();
+          formData.append("file", selectedFiles[0]);
+          if (apiKey.trim()) {
+            formData.append("llm_api_key", apiKey);
+          }
+          const cleanedBase = normalizeOptionalUrl(llmBaseUrl);
+          if (cleanedBase) {
+            formData.append("llm_base_url", cleanedBase);
+          }
+
+          const mindmapEndpoint = `${backendBase}/mindmap`;
+          const response = await fetch(mindmapEndpoint, {
+            method: "POST",
+            body: formData,
+          });
+
+          if (!response.ok) {
+            const text = await response.text();
+            throw new Error(text || "心智圖生成失敗");
+          }
+
+          const data = (await response.json()) as MindmapResponse;
+          const normalized: MindmapResponse = {
+            ...data,
+            mindmap_file_url: toAbsoluteUrl(data.mindmap_file_url),
+            mindmap_image_url: toAbsoluteUrl(data.mindmap_image_url),
+            source_upload_url: toAbsoluteUrl(data.source_upload_url),
+          };
+          setMindmapResult(normalized);
+          return normalized;
+        } catch (err) {
+          const message =
+            err instanceof Error ? err.message : "心智圖生成時發生未知錯誤";
+          if (!options?.silent) {
+            setMindmapError(message);
+          }
+          setMindmapResult(null);
+          return null;
+        } finally {
+          setIsMindmapLoading(false);
+          mindmapRequestRef.current = null;
+        }
+      })();
+
+      mindmapRequestRef.current = fetchPromise;
+      return fetchPromise;
+    },
+    [mindmapResult, selectedFiles, apiKey, llmBaseUrl, backendBase, toAbsoluteUrl],
+  );
 
   const resetSelection = useCallback(() => {
     setSelectedFiles([]);
@@ -545,6 +584,63 @@ export default function Home() {
     setAnalysisCompleteMessage(null);
     setAnalysisProgress(null);
   }, []);
+
+  const handleDownloadReport = useCallback(async () => {
+    if (!analysisResult) {
+      setError("請先完成檔案分析後再下載報告");
+      return;
+    }
+
+    setIsDownloading(true);
+
+    try {
+      const languageLabel = analysisResult.language
+        ? analysisResult.language.toUpperCase()
+        : null;
+
+      let mindmapData = mindmapResult;
+      if (!mindmapData) {
+        mindmapData = await ensureMindmap();
+      }
+
+      const pdfBytes = await generateAnalysisPdf({
+        documentTitle: selectedFileName || "未命名檔案",
+        languageLabel,
+        totalPages: analysisResult.total_pages,
+        globalSummary: analysisResult.global_summary,
+        aggregatedKeywords,
+        pageSummaries: analysisResult.page_summaries,
+        wordcloudUrl: analysisResult.wordcloud_image_url ?? undefined,
+        mindmapImageUrl: mindmapData?.mindmap_image_url ?? undefined,
+      });
+
+      const blob = new Blob([pdfBytes], { type: "application/pdf" });
+      const downloadUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      const baseName = (selectedFileName || "分析報告")
+        .replace(/\\.[^\\.]+$/, "")
+        .replace(/[\\\\/:*?"<>|]/g, "_");
+      anchor.href = downloadUrl;
+      anchor.download = `${baseName || "分析報告"}-分析結果.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      console.error("生成 PDF 失敗", err);
+      const message =
+        err instanceof Error ? err.message : "PDF 生成時發生未知錯誤";
+      setError(message);
+    } finally {
+      setIsDownloading(false);
+    }
+  }, [
+    analysisResult,
+    aggregatedKeywords,
+    ensureMindmap,
+    mindmapResult,
+    selectedFileName,
+  ]);
 
   const renderMindmap = () => {
     if (mindmapError) {
@@ -741,15 +837,6 @@ export default function Home() {
       blank: "空白/水印",
       cover: "封面",
     };
-
-    const aggregatedKeywords = Array.from(
-      new Set(
-        analysisResult.page_summaries
-          .map((page) => page.keywords.slice(0, 4))
-          .flat()
-          .filter((kw) => kw.trim().length > 0),
-      ),
-    ).slice(0, 24);
 
     return (
       <div className="space-y-8">
@@ -1123,12 +1210,40 @@ export default function Home() {
           </div>
 
           <section className="relative w-full rounded-[40px] border border-white/60 bg-white/95 p-10 shadow-2xl">
-            <div className="flex flex-col items-center gap-4 text-center">
-              <div>
+            <div className="flex flex-col gap-4 text-center lg:flex-row lg:items-center lg:justify-between">
+              <div className="lg:text-left">
                 <h2 className="text-3xl font-semibold text-slate-900">分析結果整理</h2>
                 <p className="mt-3 text-base text-slate-600">
                   檔案分析完成後，全局摘要、逐頁重點與心智圖會集中顯示在此區域。
                 </p>
+              </div>
+              <div className="flex flex-col items-center gap-2 lg:items-end">
+                <button
+                  type="button"
+                  onClick={() => void handleDownloadReport()}
+                  disabled={!analysisResult || isDownloading || isAnalyzing}
+                  className={`inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm font-medium transition ${
+                    !analysisResult || isDownloading || isAnalyzing
+                      ? "cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400"
+                      : "border border-emerald-200 bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg hover:from-emerald-600 hover:to-teal-600"
+                  }`}
+                >
+                  {isDownloading ? "PDF 準備中…" : "下載 PDF 報告"}
+                  {!isDownloading ? (
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      className="h-4 w-4"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16.5V18a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1.5" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v11m0 0-3.5-3.5M12 16l3.5-3.5" />
+                    </svg>
+                  ) : null}
+                </button>
+                <p className="text-xs text-slate-400">PDF 將包含摘要、關鍵字、文字雲與心智圖</p>
               </div>
             </div>
             <div className="mt-6">{renderAnalysisPanel()}</div>
