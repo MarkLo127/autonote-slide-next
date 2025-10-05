@@ -1,6 +1,10 @@
 # Autonote&Slide
 
+## Zeabur
+https://autonote-slide.zeabur.app
 
+## Vercel
+https://autonote-slide-next.vercel.app
 
 ### 1. 克隆專案
 
