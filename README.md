@@ -38,5 +38,5 @@ docker compose up -d
 ### 停止服務：
 
 ```bash
-docker compose down
+docker compose down -v
 ```
